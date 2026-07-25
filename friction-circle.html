@@ -15,7 +15,7 @@
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
   body{background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Yu Gothic UI","Noto Sans JP",system-ui,sans-serif;
-       display:flex;flex-direction:column;overscroll-behavior:none}
+       display:flex;flex-direction:column;overscroll-behavior:none;height:100vh;height:100dvh}
   header{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);flex:none}
   header .t{font-weight:700;font-size:15px}
   header .car{font-size:11px;color:var(--ink2)}
@@ -49,10 +49,30 @@
   .meters .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
   .meters .u{font-size:11px;color:var(--ink3)}
   #mUse .v{color:var(--accent2)}
-  #ggWrap{display:flex;justify-content:center;margin:2px 0 6px}
+  #ggWrap{display:flex;justify-content:center;align-items:center;margin:2px 0 6px}
   canvas.gg{border-radius:12px;background:#10151d;touch-action:none}
-  #calWarn{font-size:11px;color:var(--accent2);text-align:center;margin-bottom:6px;display:none}
-  .recBar{display:flex;justify-content:flex-end;margin-bottom:6px}
+  #calWarn{font-size:10px;color:var(--accent2);text-align:left;line-height:1.5;flex:1}
+  .recBar{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  #recSide{display:contents}
+  @media (orientation:portrait){
+    #vRec.on{display:flex;flex-direction:column}
+    .recBar{order:1}#camWrap{order:2}.meters{order:3}
+    #ggWrap{order:4}#btnRec{order:5}#saveCard{order:6}
+  }
+  @media (orientation:landscape){
+    #vRec.on{display:grid;grid-template-columns:auto minmax(0,1fr);
+      grid-template-rows:minmax(0,1fr);height:100%;column-gap:12px;max-width:900px}
+    #recSide{display:flex;flex-direction:column;min-height:0;overflow-y:auto}
+    #ggWrap{margin:0}
+    .meters{display:grid;grid-template-columns:repeat(2,1fr);row-gap:6px}
+    #camWrap video{max-height:24vh}
+    #rpBody.hasVid{display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+      column-gap:8px;align-items:start}
+    #rpBody.hasVid #rpVideo{max-height:44vh;margin:0}
+    #rpBody.hasVid .split{margin-top:0}
+    #rpBody.hasVid #stripBox,#rpBody.hasVid .ctrlRow,
+    #rpBody.hasVid .statsRow,#rpBody.hasVid > .note{grid-column:1/3}
+  }
   .camTgl{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
       border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer}
   .camTgl.off{color:var(--ink3)}
@@ -85,6 +105,7 @@
   .fileRow{display:flex;gap:8px}
   .fileRow .btn{margin-top:0}
   input[type=file]{display:none}
+  #loadCard.mini .fileRow{display:none}
   #saveCard{display:none}
   dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:320px}
   dialog::backdrop{background:rgba(0,0,0,.6)}
@@ -99,16 +120,19 @@
 
   <!-- ============ 記録 ============ -->
   <section class="view on" id="vRec">
-    <div id="calWarn" style="display:block">記録開始を押すと3・2・1のカウントダウン中に自動キャリブレーションします。必ず停車中に押してください。</div>
-    <div class="recBar"><button class="camTgl" id="btnCamTgl">カメラ: ON</button></div>
+    <div id="ggWrap"><canvas id="ggRec" class="gg"></canvas></div>
+    <div id="recSide">
+    <div class="recBar" id="recBar">
+      <div id="calWarn">記録開始を押すと3・2・1のカウントダウン中に自動キャリブレーションします。必ず停車中に押してください。</div>
+      <button class="camTgl" id="btnCamTgl">カメラ: ON</button>
+    </div>
     <div id="camWrap"><video id="camPrev" autoplay muted playsinline></video><div id="recBadge">● REC</div></div>
-    <div class="meters">
+    <div class="meters" id="meters">
       <div><div class="l">速度</div><div class="v" id="mSpd">--</div><div class="u">km/h</div></div>
       <div id="mUse"><div class="l">摩擦円使用率</div><div class="v" id="mUseV">0</div><div class="u">%</div></div>
       <div><div class="l">ピーク</div><div class="v" id="mPeak">0.00</div><div class="u">G</div></div>
       <div><div class="l">記録時間</div><div class="v" id="mTime">0:00</div><div class="u">min:sec</div></div>
     </div>
-    <div id="ggWrap"><canvas id="ggRec" class="gg"></canvas></div>
     <button class="btn warn" id="btnRec">● 記録開始</button>
     <div class="card" id="saveCard">
       <h3>記録の保存</h3>
@@ -119,12 +143,13 @@
       </div>
       <div class="note">2つのファイルを端末に保存し、「再生」タブで読み込むと振り返りができます。</div>
     </div>
+    </div><!-- /recSide -->
   </section>
 
   <!-- ============ 再生 ============ -->
   <section class="view" id="vRep">
-    <div class="card">
-      <h3>記録の読み込み</h3>
+    <div class="card" id="loadCard">
+      <h3 style="display:flex;justify-content:space-between;cursor:pointer" id="loadTgl">記録の読み込み <span id="loadTglV" style="color:var(--ink3)">たたむ ▲</span></h3>
       <div class="fileRow">
         <button class="btn pr" id="btnLoadJson">データ(.json)を開く</button>
         <button class="btn" id="btnLoadVideo">動画を開く</button>
@@ -252,7 +277,7 @@ function toggleCam(on){
     camStream=null;$("camPrev").srcObject=null;
   }
   updateCamTgl();
-  startCamPreview();
+  startCamPreview().then(sizeRecGG);
   return true;
 }
 function updateCamTgl(){
@@ -268,7 +293,7 @@ $("setDemo").addEventListener("change",e=>{set.demo=e.target.checked;saveSet();r
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
   document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));
   document.querySelectorAll(".view").forEach(v=>v.classList.toggle("on",v.id===b.dataset.v));
-  if(b.dataset.v==="vRec"){sizeRecGG();startCamPreview();}
+  if(b.dataset.v==="vRec"){sizeRecGG();startCamPreview().then(sizeRecGG);}
   if(b.dataset.v==="vRep"){sizeRep();}
 }));
 
@@ -333,9 +358,17 @@ function createGG(canvas){
 }
 const ggRec=createGG($("ggRec"));
 function sizeRecGG(){
-  const w=Math.min(document.querySelector("main").clientWidth-24,
-                   window.innerHeight*0.46,420);
-  ggRec.setSize(Math.max(220,Math.floor(w)));
+  const M=document.querySelector("main");
+  const land=window.innerWidth>window.innerHeight;
+  let s;
+  if(land){ // 横画面: 左=摩擦円 / 右=カメラ・メーター・ボタン
+    s=Math.min(M.clientHeight-22,Math.floor(M.clientWidth*0.52),470);
+  }else{    // 縦画面: 他要素の実寸を引いた残り高さいっぱいに円を表示
+    const H=id=>{const e=$(id);return e?e.getBoundingClientRect().height:0;};
+    const used=H("recBar")+H("camWrap")+H("meters")+H("btnRec")+H("saveCard")+58;
+    s=Math.min(M.clientWidth-20,M.clientHeight-used,470);
+  }
+  ggRec.setSize(Math.max(160,Math.floor(s)));
 }
 window.addEventListener("resize",()=>{sizeRecGG();sizeRep();});
 
@@ -500,7 +533,7 @@ async function startRec(){
   rec.demo=set.demo?demoStepper():null;
   ggRec.clearHist();ggRec.trail=[];
   $("btnRec").textContent="■ 記録停止";$("saveCard").style.display="none";
-  $("recBadge").style.display="none";updateCamTgl();
+  $("recBadge").style.display="none";updateCamTgl();sizeRecGG();
   startGpsWatch();
   // camera
   if(set.useCam&&camStream&&!set.demo){
@@ -546,7 +579,7 @@ function stopRec(){
     rec.jsonObj={app:"friction-circle-recorder",version:1,date:new Date().toISOString(),
       car:{name:set.carName,maxG:set.carMaxG},rate:set.rate,samples:rec.samples,gps:rec.gps};
     if(rec.videoLag!=null)rec.jsonObj.videoLag=+rec.videoLag.toFixed(2);
-    $("saveCard").style.display="block";
+    $("saveCard").style.display="block";sizeRecGG();
     $("btnDlVideo").disabled=!rec.videoBlob;
     $("btnDlVideo").textContent=rec.videoBlob?
       "動画を保存("+(rec.videoBlob.size/1048576).toFixed(1)+"MB)":"動画なし";
@@ -604,6 +637,12 @@ const ggRep=createGG($("ggRep"));
 const rpV=$("rpVideo");
 const BCOL=["#34d399","#fbbf24","#f43f5e"];
 
+function setLoadMini(on){
+  $("loadCard").classList.toggle("mini",on);
+  $("loadTglV").textContent=on?"開く ▼":"たたむ ▲";
+  sizeRep();
+}
+$("loadTgl").addEventListener("click",()=>setLoadMini(!$("loadCard").classList.contains("mini")));
 $("btnLoadJson").addEventListener("click",()=>$("fJson").click());
 $("btnLoadVideo").addEventListener("click",()=>$("fVideo").click());
 $("fJson").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
@@ -611,6 +650,7 @@ $("fJson").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
   e.target.value="";});
 $("fVideo").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
   rpV.src=URL.createObjectURL(f);rpV.style.display="block";rpV.playbackRate=R.speed;
+  $("rpBody").classList.add("hasVid");sizeRep();
   e.target.value="";});
 $("btnDemoRep").addEventListener("click",()=>loadData(genDemoJson(120)));
 $("btnLoadJsonB").addEventListener("click",()=>$("fJsonB").click());
@@ -673,14 +713,16 @@ function loadData(j){
   $("stHi").textContent=Math.round(hi/(j.rate||25))+"s";
   R.offset=(typeof j.videoLag==="number")?Math.max(-3,Math.min(3,j.videoLag)):0;
   $("rpOfs").value=R.offset;$("rpOfsV").textContent=R.offset.toFixed(1);
+  setLoadMini(true); // 読み込み後はボタン群を折りたたむ
   sizeRep();buildMap();
   $("btnPlay").textContent="▶ 再生";
   renderAt(0);
 }
 function sizeRep(){
   if(!R.data||$("rpBody").style.display==="none")return;
-  const w=$("vRep").clientWidth-20;
-  const gg=Math.max(160,Math.min(260,Math.floor(w*0.42)));
+  const sp=document.querySelector("#vRep .split");
+  const w=(sp?sp.clientWidth:0)||($("vRep").clientWidth-20);
+  const gg=Math.max(150,Math.min(280,Math.floor(w*0.42)));
   ggRep.setSize(gg);
   $("rpMap").style.height=gg+"px";
   if(R.map)setTimeout(()=>R.map.invalidateSize(),50);
