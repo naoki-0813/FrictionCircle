@@ -54,10 +54,12 @@
   #calWarn{font-size:10px;color:var(--accent2);text-align:left;line-height:1.5;flex:1}
   .recBar{display:flex;align-items:center;gap:10px;margin-bottom:6px}
   #recSide{display:contents}
+  .smoothRow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink2);margin:2px 2px 4px}
+  .smoothRow input{flex:1;accent-color:var(--accent)}
   @media (orientation:portrait){
     #vRec.on{display:flex;flex-direction:column}
-    .recBar{order:1}#camWrap{order:2}.meters{order:3}
-    #ggWrap{order:4}#btnRec{order:5}#saveCard{order:6}
+    .recBar{order:1}#camWrap{order:2}.meters{order:3}#smoothRow{order:4}
+    #ggWrap{order:5}#btnRec{order:6}#saveCard{order:7}
   }
   @media (orientation:landscape){
     #vRec.on{display:grid;grid-template-columns:auto minmax(0,1fr);
@@ -133,6 +135,11 @@
       <div><div class="l">ピーク</div><div class="v" id="mPeak">0.00</div><div class="u">G</div></div>
       <div><div class="l">記録時間</div><div class="v" id="mTime">0:00</div><div class="u">min:sec</div></div>
     </div>
+    <div class="smoothRow" id="smoothRow">
+      <span>なめらかさ</span>
+      <input type="range" id="recSmooth" min="0" max="100" step="5">
+      <span id="recSmoothV" style="min-width:2em;text-align:right">30</span>
+    </div>
     <button class="btn warn" id="btnRec">● 記録開始</button>
     <div class="card" id="saveCard">
       <h3>記録の保存</h3>
@@ -181,6 +188,9 @@
         <label id="bOffLab" style="display:none;color:#fb923c">B開始補正
           <input type="range" id="rpOfsB" min="-15" max="15" step="0.1" value="0" style="width:110px">
           <span id="rpOfsBV">0.0</span>s</label>
+        <label>なめらかさ
+          <input type="range" id="rpSmooth" min="0" max="100" step="5" value="30" style="width:90px">
+          <span id="rpSmoothV">30</span></label>
       </div>
       <div class="statsRow">
         <div class="stat"><div class="l">最大G</div><div class="v" id="stMax">-</div></div>
@@ -240,7 +250,7 @@ const G0=9.80665;
 
 /* ================= 設定 ================= */
 const set={carName:"マイカー",carMaxG:1.05,rate:25,flip:false,flipLon:false,useCam:true,demo:false,
-  calib:null /* {f0:{x,y,z}} */};
+  smooth:30,calib:null /* {f0:{x,y,z}} */};
 function loadSet(){try{const s=JSON.parse(localStorage.getItem("fcset"));if(s)Object.assign(set,s);}catch(e){}
   set.demo=false;/* デモモードは常にOFFで起動 */}
 function saveSet(){try{localStorage.setItem("fcset",JSON.stringify(set));}catch(e){}}
@@ -250,6 +260,7 @@ function refreshSetUI(){
   $("setScale").textContent=scaleG().toFixed(2)+" G";
   $("setFlip").checked=set.flip; $("setFlipLon").checked=set.flipLon;
   $("setRate").value=set.rate; $("setDemo").checked=set.demo;
+  $("recSmooth").value=set.smooth; $("recSmoothV").textContent=set.smooth;
   $("hCar").textContent=set.carName+" / 最大"+set.carMaxG.toFixed(2)+"G";
   updateCamTgl();
   updateStat();
@@ -269,6 +280,8 @@ function updateStat(){
 }));
 $("setFlip").addEventListener("change",e=>{set.flip=e.target.checked;saveSet();});
 $("setFlipLon").addEventListener("change",e=>{set.flipLon=e.target.checked;saveSet();});
+$("recSmooth").addEventListener("input",e=>{
+  set.smooth=+e.target.value;$("recSmoothV").textContent=set.smooth;saveSet();});
 function toggleCam(on){
   if(rec.on){alert("記録中はカメラ設定を変更できません。");return false;}
   set.useCam=on;saveSet();
@@ -365,7 +378,7 @@ function sizeRecGG(){
     s=Math.min(M.clientHeight-22,Math.floor(M.clientWidth*0.52),470);
   }else{    // 縦画面: 他要素の実寸を引いた残り高さいっぱいに円を表示
     const H=id=>{const e=$(id);return e?e.getBoundingClientRect().height:0;};
-    const used=H("recBar")+H("camWrap")+H("meters")+H("btnRec")+H("saveCard")+58;
+    const used=H("recBar")+H("camWrap")+H("meters")+H("smoothRow")+H("btnRec")+H("saveCard")+58;
     s=Math.min(M.clientWidth-20,M.clientHeight-used,470);
   }
   ggRec.setSize(Math.max(160,Math.floor(s)));
@@ -415,6 +428,37 @@ function vehicleG(f){ // 正規化済みセンサー値 -> [横G, 前後G]
   return[lat,lon];
 }
 const nf=f=>({x:AXSIGN*f.x,y:AXSIGN*f.y,z:AXSIGN*f.z});
+
+/* ---- なめらかさフィルタ (メディアン3=段差スパイク除去 + EMA=振動平滑化) ---- */
+const med3=(a,b,c)=>Math.max(Math.min(a,b),Math.min(Math.max(a,b),c));
+const tauOf=v=>(v/100)*(v/100)*0.8; // スライダー0-100 → 時定数0〜0.8秒
+function newFState(){return{h:[],e:null};}
+function stepF(st,la,lo,dt,tau){
+  st.h.push([la,lo]);if(st.h.length>3)st.h.shift();
+  const n=st.h.length;
+  const ml=n<3?la:med3(st.h[0][0],st.h[1][0],st.h[2][0]);
+  const mo=n<3?lo:med3(st.h[0][1],st.h[1][1],st.h[2][1]);
+  if(tau<=0){st.e=[ml,mo];return st.e;}
+  const a=dt/(tau+dt);
+  st.e=st.e?[st.e[0]+a*(ml-st.e[0]),st.e[1]+a*(mo-st.e[1])]:[ml,mo];
+  return st.e;
+}
+function smoothArr(S,rate,val){ // 再生用: 生サンプル配列を一括平滑化
+  const tau=tauOf(val);
+  if(tau<=0||S.length<3)return S;
+  const dt=1/(rate||25),a=dt/(tau+dt);
+  const out=new Array(S.length);
+  let e0=S[0][1],e1=S[0][2];
+  for(let i=0;i<S.length;i++){
+    const i0=Math.max(0,i-1),i2=Math.min(S.length-1,i+1);
+    const ml=med3(S[i0][1],S[i][1],S[i2][1]);
+    const mo=med3(S[i0][2],S[i][2],S[i2][2]);
+    e0+=a*(ml-e0);e1+=a*(mo-e1);
+    out[i]=[S[i][0],e0,e1];
+  }
+  return out;
+}
+let dispF=newFState(),lastFrame=0;
 window.addEventListener("devicemotion",ev=>{
   motionSeen=true;
   const raw=ev.accelerationIncludingGravity;
@@ -531,6 +575,7 @@ async function startRec(){
   rec.videoBlob=null;rec.jsonObj=null;
   rec.t0=performance.now();
   rec.demo=set.demo?demoStepper():null;
+  rec.f=newFState();rec.prevS=null;
   ggRec.clearHist();ggRec.trail=[];
   $("btnRec").textContent="■ 記録停止";$("saveCard").style.display="none";
   $("recBadge").style.display="none";updateCamTgl();sizeRecGG();
@@ -565,10 +610,11 @@ async function startRec(){
     }
     if(!g)return;
     const p=[+g[0].toFixed(3),+g[1].toFixed(3)];
-    const prev=rec.samples[rec.samples.length-1];
-    rec.samples.push([Math.round(t),p[0],p[1]]);
-    if(prev)ggRec.histSeg([prev[1],prev[2]],[p[0],p[1]]);
-    rec.peak=Math.max(rec.peak,Math.hypot(p[0],p[1]));
+    rec.samples.push([Math.round(t),p[0],p[1]]); // 保存は生データのまま
+    const s=stepF(rec.f,p[0],p[1],dt,tauOf(set.smooth)); // 表示・履歴は平滑化
+    if(rec.prevS)ggRec.histSeg(rec.prevS,[s[0],s[1]]);
+    rec.prevS=[s[0],s[1]];
+    rec.peak=Math.max(rec.peak,Math.hypot(s[0],s[1]));
   },1000*dt);
 }
 function stopRec(){
@@ -579,6 +625,7 @@ function stopRec(){
     rec.jsonObj={app:"friction-circle-recorder",version:1,date:new Date().toISOString(),
       car:{name:set.carName,maxG:set.carMaxG},rate:set.rate,samples:rec.samples,gps:rec.gps};
     if(rec.videoLag!=null)rec.jsonObj.videoLag=+rec.videoLag.toFixed(2);
+    rec.jsonObj.smooth=set.smooth;
     $("saveCard").style.display="block";sizeRecGG();
     $("btnDlVideo").disabled=!rec.videoBlob;
     $("btnDlVideo").textContent=rec.videoBlob?
@@ -589,7 +636,22 @@ function stopRec(){
     rec.mr.stop();
   }else fin();
 }
-function dl(blob,name){
+async function dl(blob,name){
+  // iPhone/iPad: 共有シートで「ファイルに保存」できるようにする
+  // (ホーム画面に追加したWebアプリではダウンロードが動かないことがあるため)
+  const isIOS=AXSIGN===-1;
+  if(isIOS&&navigator.canShare){
+    try{
+      const file=new File([blob],name,{type:blob.type||"application/octet-stream"});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file]});
+        return;
+      }
+    }catch(e){
+      if(e&&e.name==="AbortError")return; // ユーザーがキャンセル
+      /* 共有に失敗した場合は下のダウンロード方式へフォールバック */
+    }
+  }
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
   document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
@@ -612,9 +674,11 @@ function recLoop(){
   requestAnimationFrame(recLoop);
   if(!$("vRec").classList.contains("on"))return;
   const now=performance.now();
-  let cur=null;
-  if(rec.on&&rec.samples.length){const l=rec.samples[rec.samples.length-1];cur=[l[1],l[2]];}
-  else if(latestG)cur=[latestG[0],latestG[1]];
+  const dtF=Math.min(0.2,(now-lastFrame)/1000||0.04);lastFrame=now;
+  let raw=null;
+  if(rec.on&&rec.samples.length){const l=rec.samples[rec.samples.length-1];raw=[l[1],l[2]];}
+  else if(latestG)raw=[latestG[0],latestG[1]];
+  const cur=raw?stepF(dispF,raw[0],raw[1],dtF,tauOf(set.smooth)):null;
   if(cur){
     ggRec.cur=cur;
     ggRec.trail.push([cur[0],cur[1],now]);
@@ -630,7 +694,7 @@ function recLoop(){
 }
 
 /* ================= 再生 ================= */
-const R={data:null,playing:false,clock:0,speed:1,offset:0,dur:0,
+const R={data:null,playing:false,clock:0,speed:1,offset:0,dur:0,sm:30,lastT:0,
   stripCv:null,map:null,marker:null,marker2:null,mapCanvas:false,lastRAF:0,
   b:{data:null,maxG:1,off:0}};
 const ggRep=createGG($("ggRep"));
@@ -676,7 +740,7 @@ function loadDataB(j){
     ((j.car&&j.car.name)?j.car.name+" / ":"")+
     (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
     "─ "+(j.samples[j.samples.length-1][0]/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G";
-  buildHist();buildStrip();buildMap();
+  applySmooth();buildMap();
 }
 function clearB(){
   R.b.data=null;R.marker2=null;
@@ -687,7 +751,7 @@ function clearB(){
 
 function idxAt(arr,t){let lo=0,hi=arr.length-1;
   while(lo<hi){const m=(lo+hi+1)>>1;if(arr[m][0]<=t)lo=m;else hi=m-1;}return lo;}
-function usageOf(data,maxG,t){const S=data.samples,s=S[idxAt(S,t)];
+function usageOf(data,maxG,t){const S=data.S||data.samples,s=S[idxAt(S,t)];
   return Math.hypot(s[1],s[2])/maxG;}
 function usageAt(t){return usageOf(R.data,set.carMaxG,t);}
 function posOf(g,t){if(!g||!g.length)return null;
@@ -705,19 +769,33 @@ function loadData(j){
   $("rpInfo").textContent=(j.name?j.name+" / ":"")+(j.car?j.car.name+" / ":"")+
     (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
     "─ "+(R.dur/1000).toFixed(0)+"秒 / GPS点 "+(j.gps?j.gps.length:0);
-  let mx=0,sum=0,hi=0;
-  for(const s of j.samples){const g=Math.hypot(s[1],s[2]);mx=Math.max(mx,g);sum+=g;
-    if(g/set.carMaxG>=0.9)hi++;}
-  $("stMax").textContent=mx.toFixed(2)+"G";
-  $("stAvg").textContent=Math.round(sum/j.samples.length/set.carMaxG*100)+"%";
-  $("stHi").textContent=Math.round(hi/(j.rate||25))+"s";
   R.offset=(typeof j.videoLag==="number")?Math.max(-3,Math.min(3,j.videoLag)):0;
   $("rpOfs").value=R.offset;$("rpOfsV").textContent=R.offset.toFixed(1);
+  R.sm=(typeof j.smooth==="number")?j.smooth:set.smooth;
+  $("rpSmooth").value=R.sm;$("rpSmoothV").textContent=R.sm;
   setLoadMini(true); // 読み込み後はボタン群を折りたたむ
-  sizeRep();buildMap();
+  sizeRep();applySmooth();buildMap();
   $("btnPlay").textContent="▶ 再生";
-  renderAt(0);
 }
+function updStats(){
+  if(!R.data)return;
+  const S=R.data.S||R.data.samples;
+  let mx=0,sum=0,hi=0;
+  for(const s of S){const g=Math.hypot(s[1],s[2]);mx=Math.max(mx,g);sum+=g;
+    if(g/set.carMaxG>=0.9)hi++;}
+  $("stMax").textContent=mx.toFixed(2)+"G";
+  $("stAvg").textContent=Math.round(sum/S.length/set.carMaxG*100)+"%";
+  $("stHi").textContent=Math.round(hi/(R.data.rate||25))+"s";
+}
+function applySmooth(){
+  if(!R.data)return;
+  R.data.S=smoothArr(R.data.samples,R.data.rate,R.sm);
+  if(R.b.data)R.b.data.S=smoothArr(R.b.data.samples,R.b.data.rate,R.sm);
+  buildHist();buildStrip();updStats();renderAt(R.lastT||0);
+}
+$("rpSmooth").addEventListener("input",e=>{
+  R.sm=+e.target.value;$("rpSmoothV").textContent=R.sm;applySmooth();});
+$("rpSmooth").addEventListener("change",()=>buildMap());
 function sizeRep(){
   if(!R.data||$("rpBody").style.display==="none")return;
   const sp=document.querySelector("#vRep .split");
@@ -731,11 +809,11 @@ function sizeRep(){
 }
 function buildHist(){
   if(!R.data)return;ggRep.clearHist();
-  const S=R.data.samples,step=Math.max(1,Math.ceil(S.length/4000));
+  const S=R.data.S||R.data.samples,step=Math.max(1,Math.ceil(S.length/4000));
   for(let i=step;i<S.length;i+=step)
     ggRep.histSeg([S[i-step][1],S[i-step][2]],[S[i][1],S[i][2]]);
   if(R.b.data){
-    const B=R.b.data.samples,st=Math.max(1,Math.ceil(B.length/4000));
+    const B=R.b.data.S||R.b.data.samples,st=Math.max(1,Math.ceil(B.length/4000));
     for(let i=st;i<B.length;i+=st)
       ggRep.histSeg([B[i-st][1],B[i-st][2]],[B[i][1],B[i][2]],"rgba(251,146,60,0.26)");
   }
@@ -757,7 +835,7 @@ function buildStrip(){
   for(let x=0;x<W;x+=2){const y=yOf(usageAt(x/W*R.dur));x?c.lineTo(x,y):c.moveTo(x,y);}
   c.stroke();
   if(R.b.data){
-    const SB=R.b.data.samples,durB=SB[SB.length-1][0];
+    const SB=R.b.data.S||R.b.data.samples,durB=SB[SB.length-1][0];
     c.strokeStyle="#fb923c";c.lineWidth=1.5*d;c.beginPath();let pen=false;
     for(let x=0;x<W;x+=2){
       const tB=x/W*R.dur-R.b.off*1000;
@@ -858,13 +936,14 @@ function drawMapCanvas(tms){
   c.fillText("GPS走行ライン(簡易表示)",8*d,14*d);
 }
 function renderAt(tms){
-  const S=R.data.samples,i=idxAt(S,tms);
+  R.lastT=tms;
+  const S=R.data.S||R.data.samples,i=idxAt(S,tms);
   const trail=[];let j=i;
   while(j>=0&&tms-S[j][0]<=3000){trail.push([S[j][1],S[j][2],S[j][0]]);j--;}
   trail.reverse();
   ggRep.trail=trail;ggRep.cur=[S[i][1],S[i][2]];
   if(R.b.data){
-    const SB=R.b.data.samples,durB=SB[SB.length-1][0],tB=tms-R.b.off*1000;
+    const SB=R.b.data.S||R.b.data.samples,durB=SB[SB.length-1][0],tB=tms-R.b.off*1000;
     if(tB>=0&&tB<=durB){
       const ib=idxAt(SB,tB),trB=[];let k=ib;
       while(k>=0&&tB-SB[k][0]<=3000){trB.push([SB[k][1],SB[k][2],SB[k][0]]);k--;}
