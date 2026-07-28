@@ -148,6 +148,7 @@
         <button class="btn pr" id="btnDlJson">データ(.json)を保存</button>
         <button class="btn" id="btnDlVideo" disabled>動画を保存</button>
       </div>
+      <div class="note" id="saveMsg" style="color:var(--accent)"></div>
       <div class="note">2つのファイルを端末に保存し、「再生」タブで読み込むと振り返りができます。</div>
     </div>
     </div><!-- /recSide -->
@@ -636,25 +637,40 @@ function stopRec(){
     rec.mr.stop();
   }else fin();
 }
+function saveMsg(t){const e=$("saveMsg");if(e)e.textContent=t;}
 async function dl(blob,name){
-  // iPhone/iPad: 共有シートで「ファイルに保存」できるようにする
-  // (ホーム画面に追加したWebアプリではダウンロードが動かないことがあるため)
-  const isIOS=AXSIGN===-1;
-  if(isIOS&&navigator.canShare){
-    try{
-      const file=new File([blob],name,{type:blob.type||"application/octet-stream"});
-      if(navigator.canShare({files:[file]})){
-        await navigator.share({files:[file]});
-        return;
-      }
-    }catch(e){
-      if(e&&e.name==="AbortError")return; // ユーザーがキャンセル
-      /* 共有に失敗した場合は下のダウンロード方式へフォールバック */
+  /* Fusion-Dashと同じ三段構えの保存方式:
+     ① まず共有シート(Web Share API)でファイルを渡す(iPhoneはこれが確実)
+     ② ダメならダウンロード(PC/Android)
+     ③ 最終手段: テキストデータなら新規タブに表示 */
+  try{
+    const file=new File([blob],name,{type:blob.type||"application/octet-stream"});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:name});
+      saveMsg("共有シートから保存/送信できます");
+      return;
     }
+  }catch(e){
+    if(e&&e.name==="AbortError"){saveMsg("共有をキャンセルしました");return;}
+    /* 共有不可 → 下のフォールバックへ */
   }
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
-  document.body.appendChild(a);a.click();
-  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+  try{
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+    saveMsg("保存しました: "+name);
+    return;
+  }catch(e){}
+  if((blob.type||"").includes("json")){
+    try{
+      const text=await blob.text();
+      const w=window.open("","_blank");
+      if(w){w.document.write("<pre style='white-space:pre-wrap;word-break:break-all;font:12px monospace'>"+
+        text.replace(/</g,"&lt;")+"</pre>");w.document.title=name;
+        saveMsg("新規タブに表示しました(長押しでコピー/共有)");return;}
+    }catch(e){}
+  }
+  saveMsg("保存に失敗しました。ブラウザの設定を確認してください");
 }
 function stamp(){const d=new Date(),z=n=>String(n).padStart(2,"0");
   return d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+"_"+z(d.getHours())+z(d.getMinutes());}
