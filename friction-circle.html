@@ -434,11 +434,11 @@ const med3=(a,b,c)=>Math.max(Math.min(a,b),Math.min(Math.max(a,b),c));
 const tauOf=v=>(v/100)*(v/100)*0.8; // スライダー0-100 → 時定数0〜0.8秒
 function newFState(){return{h:[],e:null};}
 function stepF(st,la,lo,dt,tau){
+  if(tau<=0){st.h=[];st.e=[la,lo];return st.e;} // スライダー0=完全に生データ
   st.h.push([la,lo]);if(st.h.length>3)st.h.shift();
   const n=st.h.length;
   const ml=n<3?la:med3(st.h[0][0],st.h[1][0],st.h[2][0]);
   const mo=n<3?lo:med3(st.h[0][1],st.h[1][1],st.h[2][1]);
-  if(tau<=0){st.e=[ml,mo];return st.e;}
   const a=dt/(tau+dt);
   st.e=st.e?[st.e[0]+a*(ml-st.e[0]),st.e[1]+a*(mo-st.e[1])]:[ml,mo];
   return st.e;
