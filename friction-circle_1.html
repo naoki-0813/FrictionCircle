@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>摩擦円レコーダー</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b23; --panel2:#1d242f; --line:#2a3342;
+    --ink:#e8ecf1; --ink2:#9aa7b8; --ink3:#5f6c7d;
+    --accent:#38bdf8; --accent2:#fbbf24; --rec:#ef4444; --ok:#34d399; --max:#f43f5e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Yu Gothic UI","Noto Sans JP",system-ui,sans-serif;
+       display:flex;flex-direction:column;overscroll-behavior:none;height:100vh;height:100dvh}
+  header{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);flex:none}
+  header .t{font-weight:700;font-size:15px}
+  header .car{font-size:11px;color:var(--ink2)}
+  main{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+  nav{display:flex;border-top:1px solid var(--line);flex:none;background:var(--panel);padding-bottom:env(safe-area-inset-bottom)}
+  nav button{flex:1;background:none;border:none;color:var(--ink3);font-size:12px;padding:11px 0;font-weight:600;cursor:pointer}
+  nav button.on{color:var(--accent)}
+  .view{display:none;padding:10px;max-width:760px;margin:0 auto}
+  .view.on{display:block}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+  .card h3{font-size:12px;color:var(--accent);margin-bottom:8px;font-weight:700}
+  .frow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;font-size:13px;color:var(--ink2)}
+  .frow input[type=text],.frow input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+      border-radius:8px;padding:6px 10px;width:130px;font-size:14px;text-align:right}
+  .frow input[type=text]{text-align:left}
+  .frow .ro{color:var(--ink);font-weight:700}
+  .btn{display:block;width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+       padding:11px;color:var(--ink);font-weight:600;font-size:13px;margin-top:8px;cursor:pointer;text-align:center}
+  .btn.pr{background:var(--accent);color:#04222f;border:none}
+  .btn.warn{background:var(--rec);color:#fff;border:none}
+  .btn:disabled{opacity:.4}
+  .note{font-size:11px;color:var(--ink3);line-height:1.6;margin-top:6px}
+  .ok{color:var(--ok)} .bad{color:var(--max)}
+  /* record */
+  #camWrap{position:relative;border-radius:12px;overflow:hidden;background:#000;margin-bottom:8px;display:none}
+  #camWrap video{width:100%;max-height:26vh;display:block;object-fit:cover}
+  #recBadge{position:absolute;top:8px;right:8px;background:var(--rec);color:#fff;font-size:12px;font-weight:700;
+      padding:3px 10px;border-radius:6px;display:none}
+  .meters{display:flex;justify-content:space-around;text-align:center;margin:2px 0 4px}
+  .meters .l{font-size:10px;color:var(--ink3)}
+  .meters .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+  .meters .u{font-size:11px;color:var(--ink3)}
+  #mUse .v{color:var(--accent2)}
+  #ggWrap{display:flex;justify-content:center;align-items:center;margin:2px 0 6px}
+  canvas.gg{border-radius:12px;background:#10151d;touch-action:none}
+  #calWarn{font-size:10px;color:var(--accent2);text-align:left;line-height:1.5;flex:1}
+  .recBar{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  #recSide{display:contents}
+  .smoothRow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink2);margin:2px 2px 4px}
+  .smoothRow input{flex:1;accent-color:var(--accent)}
+  @media (orientation:portrait){
+    #vRec.on{display:flex;flex-direction:column}
+    .recBar{order:1}#camWrap{order:2}.meters{order:3}#smoothRow{order:4}
+    #ggWrap{order:5}#btnRec{order:6}#saveCard{order:7}
+  }
+  @media (orientation:landscape){
+    #vRec.on{display:grid;grid-template-columns:auto minmax(0,1fr);
+      grid-template-rows:minmax(0,1fr);height:100%;column-gap:12px;max-width:900px}
+    #recSide{display:flex;flex-direction:column;min-height:0;overflow-y:auto}
+    #ggWrap{margin:0}
+    .meters{display:grid;grid-template-columns:repeat(2,1fr);row-gap:6px}
+    #camWrap video{max-height:24vh}
+    #rpBody.hasVid{display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+      column-gap:8px;align-items:start}
+    #rpBody.hasVid #rpVideo{max-height:44vh;margin:0}
+    #rpBody.hasVid .split{margin-top:0}
+    #rpBody.hasVid #stripBox,#rpBody.hasVid .ctrlRow,
+    #rpBody.hasVid .statsRow,#rpBody.hasVid > .note{grid-column:1/3}
+  }
+  .camTgl{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+      border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer}
+  .camTgl.off{color:var(--ink3)}
+  .camTgl:disabled{opacity:.4}
+  #cnt{position:fixed;inset:0;background:rgba(8,11,16,.88);display:none;
+      flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:60}
+  #cntNum{font-size:110px;font-weight:700;color:var(--accent)}
+  #cntTxt{font-size:14px;color:var(--ink2);text-align:center;line-height:1.7}
+  #splash{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:16px;z-index:100;padding:24px;text-align:center}
+  #splash .st{font-size:22px;font-weight:700}
+  #splash .sx{font-size:13px;color:var(--ink2);line-height:1.8}
+  #splash .btn{max-width:260px}
+  /* replay */
+  #rpVideo{width:100%;max-height:30vh;background:#000;border-radius:12px;display:none}
+  .split{display:flex;gap:8px;margin-top:8px;align-items:stretch}
+  #rpGGbox{flex:none;display:flex;align-items:center}
+  #rpMap{flex:1;min-height:200px;border-radius:12px;background:var(--panel2);position:relative;overflow:hidden}
+  #rpMapCv{width:100%;height:100%;position:absolute;inset:0}
+  #stripBox{margin-top:8px;background:var(--panel2);border-radius:10px;position:relative}
+  #strip{width:100%;height:64px;display:block;border-radius:10px;cursor:crosshair}
+  .ctrlRow{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px;color:var(--ink2);flex-wrap:wrap}
+  .ctrlRow .pb{background:var(--accent);color:#04222f;border:none;border-radius:8px;font-weight:700;
+      padding:8px 18px;font-size:14px;cursor:pointer}
+  .ctrlRow select,.ctrlRow input[type=range]{accent-color:var(--accent)}
+  .statsRow{display:flex;gap:8px;margin-top:8px}
+  .stat{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .stat .l{font-size:10px;color:var(--ink3)}
+  .stat .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+  .fileRow{display:flex;gap:8px}
+  .fileRow .btn{margin-top:0}
+  input[type=file]{display:none}
+  #loadCard.mini .fileRow,#loadCard.mini #savedHead,#loadCard.mini #savedList,
+  #loadCard.mini #pasteBox{display:none}
+  .savedRow{display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--line);
+      font-size:11px;color:var(--ink2);flex-wrap:wrap}
+  .savedRow .sl{flex:1;min-width:130px}
+  .savedRow button{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+      border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer}
+  #pasteBox textarea{width:100%;height:70px;background:var(--panel2);border:1px solid var(--line);
+      color:var(--ink);border-radius:8px;padding:6px;font-size:11px;margin-top:6px}
+  #saveCard{display:none}
+  dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:320px}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+</style>
+</head>
+<body>
+<header>
+  <div class="t" id="hTitle">摩擦円レコーダー</div>
+  <div class="car" id="hCar"></div>
+</header>
+<main>
+
+  <!-- ============ 記録 ============ -->
+  <section class="view on" id="vRec">
+    <div id="ggWrap"><canvas id="ggRec" class="gg"></canvas></div>
+    <div id="recSide">
+    <div class="recBar" id="recBar">
+      <div id="calWarn">記録開始を押すと3・2・1のカウントダウン中に自動キャリブレーションします。必ず停車中に押してください。</div>
+      <button class="camTgl" id="btnCamTgl">カメラ: ON</button>
+    </div>
+    <div id="camWrap"><video id="camPrev" autoplay muted playsinline></video><div id="recBadge">● REC</div></div>
+    <div class="meters" id="meters">
+      <div><div class="l">速度</div><div class="v" id="mSpd">--</div><div class="u">km/h</div></div>
+      <div id="mUse"><div class="l">摩擦円使用率</div><div class="v" id="mUseV">0</div><div class="u">%</div></div>
+      <div><div class="l">ピーク</div><div class="v" id="mPeak">0.00</div><div class="u">G</div></div>
+      <div><div class="l">記録時間</div><div class="v" id="mTime">0:00</div><div class="u">min:sec</div></div>
+    </div>
+    <div class="smoothRow" id="smoothRow">
+      <span>なめらかさ</span>
+      <input type="range" id="recSmooth" min="0" max="100" step="5">
+      <span id="recSmoothV" style="min-width:2em;text-align:right">30</span>
+    </div>
+    <button class="btn warn" id="btnRec">● 記録開始</button>
+    <div class="card" id="saveCard">
+      <h3>記録の保存</h3>
+      <div class="frow"><span>記録名(任意)</span><input type="text" id="recName" placeholder="例: 筑波1本目" style="width:170px"></div>
+      <div class="fileRow">
+        <button class="btn pr" id="btnDlJson">データ(.json)を保存</button>
+        <button class="btn" id="btnDlVideo" disabled>動画を保存</button>
+      </div>
+      <div class="fileRow" style="margin-top:8px">
+        <button class="btn" id="btnCopyJson">データをコピー(メモ/Teams等へ貼り付け用)</button>
+      </div>
+      <div class="note" id="saveMsg" style="color:var(--accent)"></div>
+      <div class="note">2つのファイルを端末に保存し、「再生」タブで読み込むと振り返りができます。</div>
+    </div>
+    </div><!-- /recSide -->
+  </section>
+
+  <!-- ============ 再生 ============ -->
+  <section class="view" id="vRep">
+    <div class="card" id="loadCard">
+      <h3 style="display:flex;justify-content:space-between;cursor:pointer" id="loadTgl">記録の読み込み <span id="loadTglV" style="color:var(--ink3)">たたむ ▲</span></h3>
+      <div class="fileRow">
+        <button class="btn pr" id="btnLoadJson">データ(.json)を開く</button>
+        <button class="btn" id="btnLoadVideo">動画を開く</button>
+      </div>
+      <div class="fileRow" style="margin-top:8px">
+        <button class="btn" id="btnLoadJsonB">比較データBを開く</button>
+        <button class="btn" id="btnClearB" style="display:none">比較を解除</button>
+      </div>
+      <div class="fileRow" style="margin-top:8px">
+        <button class="btn" id="btnDemoRep">デモデータで試す(走行不要)</button>
+        <button class="btn" id="btnDemoRepB">デモを比較Bとして読込</button>
+      </div>
+      <div class="note" id="rpInfo">まだデータが読み込まれていません。</div>
+      <div class="note" id="rpInfoB" style="display:none;color:#fb923c"></div>
+      <div id="savedHead" style="margin-top:10px;font-size:12px;color:var(--accent);font-weight:700">保存済みの記録(ブラウザ内)</div>
+      <div id="savedList"></div>
+      <div id="pasteBox">
+        <button class="btn" id="btnPasteTgl" style="margin-top:8px">テキスト(コピーしたデータ)から読み込む</button>
+        <div id="pasteArea" style="display:none">
+          <textarea id="pasteText" placeholder="コピーしておいた記録データ(JSONテキスト)をここに貼り付け"></textarea>
+          <button class="btn pr" id="btnPasteLoad">貼り付けた内容を読み込む</button>
+        </div>
+      </div>
+    </div>
+    <div id="rpBody" style="display:none">
+      <video id="rpVideo" playsinline controls muted></video>
+      <div class="split">
+        <div id="rpGGbox"><canvas id="ggRep" class="gg"></canvas></div>
+        <div id="rpMap"><canvas id="rpMapCv"></canvas></div>
+      </div>
+      <div id="stripBox"><canvas id="strip"></canvas></div>
+      <div class="ctrlRow">
+        <button class="pb" id="btnPlay">▶ 再生</button>
+        <span id="rpClock" style="font-variant-numeric:tabular-nums">0:00.0</span>
+        <label>速度 <select id="rpSpeed"><option>0.5</option><option selected>1</option><option>2</option></select>x</label>
+        <label>同期補正 <input type="range" id="rpOfs" min="-3" max="3" step="0.1" value="0" style="width:90px">
+          <span id="rpOfsV">0.0</span>s</label>
+        <label id="bOffLab" style="display:none;color:#fb923c">B開始補正
+          <input type="range" id="rpOfsB" min="-15" max="15" step="0.1" value="0" style="width:110px">
+          <span id="rpOfsBV">0.0</span>s</label>
+        <label>なめらかさ
+          <input type="range" id="rpSmooth" min="0" max="100" step="5" value="30" style="width:90px">
+          <span id="rpSmoothV">30</span></label>
+      </div>
+      <div class="statsRow">
+        <div class="stat"><div class="l">最大G</div><div class="v" id="stMax">-</div></div>
+        <div class="stat"><div class="l">平均使用率</div><div class="v" id="stAvg">-</div></div>
+        <div class="stat"><div class="l">90%超の時間</div><div class="v" id="stHi">-</div></div>
+      </div>
+      <div class="note">地図の走行ラインの色: <span class="ok">■緑=使用率60%未満</span> / <span style="color:var(--accent2)">■黄=60〜85%</span> / <span class="bad">■赤=85%以上</span>。グラフをタップするとその瞬間にジャンプします。<br>
+      比較時: <span style="color:var(--accent)">■青=基準データA</span> / <span style="color:#fb923c">■橙=比較データB</span>。スタートのズレは「B開始補正」で合わせます(+でBを遅らせる)。</div>
+    </div>
+    <input type="file" id="fJson" accept=".json,application/json">
+    <input type="file" id="fJsonB" accept=".json,application/json">
+    <input type="file" id="fVideo" accept="video/*">
+  </section>
+
+  <!-- ============ 設定 ============ -->
+  <section class="view" id="vSet">
+    <div class="card">
+      <h3>車種プロファイル</h3>
+      <div class="frow"><span>車種名</span><input type="text" id="setCar" placeholder="例: NDロードスター"></div>
+      <div class="frow"><span>車種の最大G(赤円)</span><input type="number" id="setMaxG" step="0.05" min="0.3" max="3"></div>
+      <div class="frow"><span>表示スケール(自動 ×1.2)</span><span class="ro" id="setScale">-</span></div>
+    </div>
+    <div class="card">
+      <h3>センサー・カメラ・GPS</h3>
+      <div class="frow"><span>状態</span><span class="ro" id="setStat">未許可</span></div>
+      <div class="frow"><span>左右が逆のとき反転</span><input type="checkbox" id="setFlip" style="width:20px;height:20px"></div>
+      <div class="frow"><span>前後(加速/減速)が逆のとき反転</span><input type="checkbox" id="setFlipLon" style="width:20px;height:20px"></div>
+      <button class="btn" id="btnPerm">許可をやり直す</button>
+      <div class="note">許可はアプリ起動時に求められます。キャリブレーションは記録開始のカウントダウン中に自動で行うため、操作は不要です。スマホは画面を運転者側に向けて固定してください。左右のGが逆に出る場合のみ「反転」をONにしてください。</div>
+    </div>
+    <div class="card">
+      <h3>その他</h3>
+      <div class="frow"><span>記録レート(Hz)</span><input type="number" id="setRate" step="5" min="10" max="50" value="25"></div>
+      <div class="frow"><span>デモモード(センサー無しで記録を試す)</span><input type="checkbox" id="setDemo" style="width:20px;height:20px"></div>
+    </div>
+    <div class="note" style="text-align:center">v1.0 ─ データはすべて端末内で処理され、外部送信はありません。</div>
+  </section>
+
+</main>
+<div id="cnt"><div id="cntNum">3</div><div id="cntTxt">キャリブレーション中…<br>停車したまま動かないでください</div></div>
+<div id="splash">
+  <div class="st">摩擦円レコーダー</div>
+  <div class="sx">このアプリはスマホの加速度センサー・カメラ・GPSを使用します。<br>次の画面で表示される許可をすべて「許可」してください。</div>
+  <button class="btn pr" id="btnStart">タップして開始</button>
+</div>
+<nav>
+  <button class="on" data-v="vRec">記録</button>
+  <button data-v="vRep">再生</button>
+  <button data-v="vSet">設定</button>
+</nav>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const G0=9.80665;
+
+/* ================= 設定 ================= */
+const set={carName:"マイカー",carMaxG:1.05,rate:25,flip:false,flipLon:false,useCam:true,demo:false,
+  smooth:30,calib:null /* {f0:{x,y,z}} */};
+function loadSet(){try{const s=JSON.parse(localStorage.getItem("fcset"));if(s)Object.assign(set,s);}catch(e){}
+  set.demo=false;/* デモモードは常にOFFで起動 */}
+function saveSet(){try{localStorage.setItem("fcset",JSON.stringify(set));}catch(e){}}
+function scaleG(){return set.carMaxG*1.2;}
+function refreshSetUI(){
+  $("setCar").value=set.carName; $("setMaxG").value=set.carMaxG;
+  $("setScale").textContent=scaleG().toFixed(2)+" G";
+  $("setFlip").checked=set.flip; $("setFlipLon").checked=set.flipLon;
+  $("setRate").value=set.rate; $("setDemo").checked=set.demo;
+  $("recSmooth").value=set.smooth; $("recSmoothV").textContent=set.smooth;
+  $("hCar").textContent=set.carName+" / 最大"+set.carMaxG.toFixed(2)+"G";
+  updateCamTgl();
+  updateStat();
+}
+function updateStat(){
+  const s=[];
+  s.push(perm.motion?"センサー✓":"センサー未");
+  s.push(perm.gps?"GPS✓":"GPS未");
+  s.push(perm.cam?"カメラ✓":"カメラ未");
+  $("setStat").textContent=s.join(" ");
+}
+["setCar","setMaxG","setRate"].forEach(id=>$(id).addEventListener("change",()=>{
+  set.carName=$("setCar").value||"マイカー";
+  set.carMaxG=Math.min(3,Math.max(.3,parseFloat($("setMaxG").value)||1.05));
+  set.rate=Math.min(50,Math.max(10,parseInt($("setRate").value)||25));
+  saveSet();refreshSetUI();ggRec.redraw();
+}));
+$("setFlip").addEventListener("change",e=>{set.flip=e.target.checked;saveSet();});
+$("setFlipLon").addEventListener("change",e=>{set.flipLon=e.target.checked;saveSet();});
+$("recSmooth").addEventListener("input",e=>{
+  set.smooth=+e.target.value;$("recSmoothV").textContent=set.smooth;saveSet();});
+function toggleCam(on){
+  if(rec.on){alert("記録中はカメラ設定を変更できません。");return false;}
+  set.useCam=on;saveSet();
+  if(!on&&camStream){ // カメラを完全に解放
+    camStream.getTracks().forEach(t=>t.stop());
+    camStream=null;$("camPrev").srcObject=null;
+  }
+  updateCamTgl();
+  startCamPreview().then(sizeRecGG);
+  return true;
+}
+function updateCamTgl(){
+  const b=$("btnCamTgl");
+  b.textContent=set.useCam?"カメラ: ON":"カメラ: OFF";
+  b.classList.toggle("off",!set.useCam);
+  b.disabled=rec.on;
+}
+$("btnCamTgl").addEventListener("click",()=>toggleCam(!set.useCam));
+$("setDemo").addEventListener("change",e=>{set.demo=e.target.checked;saveSet();refreshSetUI();});
+
+/* ================= タブ ================= */
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("on",v.id===b.dataset.v));
+  if(b.dataset.v==="vRec"){sizeRecGG();startCamPreview().then(sizeRecGG);}
+  if(b.dataset.v==="vRep"){sizeRep();renderSavedList();}
+}));
+
+/* ================= 摩擦円レンダラ ================= */
+function createGG(canvas){
+  const ctx=canvas.getContext("2d");
+  const hist=document.createElement("canvas"),hctx=hist.getContext("2d");
+  let px=280,d=1;
+  const o={trail:[],cur:null,trailB:[],curB:null};
+  o.setSize=s=>{d=window.devicePixelRatio||1;px=s;
+    canvas.width=s*d;canvas.height=s*d;canvas.style.width=s+"px";canvas.style.height=s+"px";
+    const old=document.createElement("canvas");old.width=hist.width;old.height=hist.height;
+    old.getContext("2d").drawImage(hist,0,0);
+    hist.width=s*d;hist.height=s*d;
+    if(old.width)hctx.drawImage(old,0,0,old.width,old.height,0,0,hist.width,hist.height);
+    o.redraw();};
+  o.clearHist=()=>{hctx.clearRect(0,0,hist.width,hist.height);};
+  const XY=(gx,gy)=>{const R=px*d/2,r=R*0.92/scaleG();return[R+gx*r,R-gy*r];};
+  o.histSeg=(p,q,col)=>{const[a,b]=XY(p[0],p[1]),[c,e]=XY(q[0],q[1]);
+    hctx.strokeStyle=col||"rgba(59,130,190,0.30)";hctx.lineWidth=2*d;hctx.lineCap="round";
+    hctx.beginPath();hctx.moveTo(a,b);hctx.lineTo(c,e);hctx.stroke();};
+  o.redraw=()=>{
+    const W=px*d,R=W/2,r1=R*0.92/scaleG();
+    ctx.clearRect(0,0,W,W);
+    // grid rings each 0.2G
+    ctx.strokeStyle="#26303f";ctx.lineWidth=1*d;
+    for(let g=.2;g<=scaleG()+.001;g+=.2){ctx.beginPath();ctx.arc(R,R,g*r1,0,7);ctx.stroke();}
+    ctx.beginPath();ctx.moveTo(R,R-scaleG()*r1);ctx.lineTo(R,R+scaleG()*r1);
+    ctx.moveTo(R-scaleG()*r1,R);ctx.lineTo(R+scaleG()*r1,R);ctx.stroke();
+    // red car-max circle
+    ctx.strokeStyle="#f43f5e";ctx.lineWidth=2*d;ctx.setLineDash([6*d,4*d]);
+    ctx.beginPath();ctx.arc(R,R,set.carMaxG*r1,0,7);ctx.stroke();ctx.setLineDash([]);
+    // labels
+    ctx.fillStyle="#5f6c7d";ctx.font=(10*d)+"px sans-serif";ctx.textAlign="center";
+    ctx.fillText("加速",R,12*d);ctx.fillText("減速",R,W-5*d);
+    ctx.textAlign="left";ctx.fillText("左",4*d,R-4*d);
+    ctx.textAlign="right";ctx.fillText("右",W-4*d,R-4*d);
+    ctx.fillStyle="#f43f5e";ctx.textAlign="left";
+    ctx.fillText("最大"+set.carMaxG.toFixed(2)+"G",R+set.carMaxG*r1*0.55,R-set.carMaxG*r1*0.80);
+    // history layer
+    ctx.drawImage(hist,0,0);
+    // recent trails (bright, fading by age)
+    const drawTrail=(tr,rgb)=>{
+      for(let i=1;i<tr.length;i++){
+        const age=(tr[tr.length-1][2]-tr[i][2])/3000; // 0..1 over 3s
+        const al=Math.max(0,1-age);
+        const[a,b]=XY(tr[i-1][0],tr[i-1][1]),[c,e]=XY(tr[i][0],tr[i][1]);
+        ctx.strokeStyle=`rgba(${rgb},${(0.15+0.85*al).toFixed(2)})`;
+        ctx.lineWidth=3*d;ctx.lineCap="round";
+        ctx.beginPath();ctx.moveTo(a,b);ctx.lineTo(c,e);ctx.stroke();
+      }};
+    drawTrail(o.trailB,"251,146,60");
+    drawTrail(o.trail,"56,189,248");
+    // current dots
+    const dot=(p,fill,r)=>{const[a,b]=XY(p[0],p[1]);
+      ctx.fillStyle=fill;ctx.strokeStyle="#0e1116";ctx.lineWidth=2*d;
+      ctx.beginPath();ctx.arc(a,b,r*d,0,7);ctx.fill();ctx.stroke();};
+    if(o.curB)dot(o.curB,"#fb923c",6);
+    if(o.cur)dot(o.cur,"#fbbf24",7);
+  };
+  return o;
+}
+const ggRec=createGG($("ggRec"));
+function sizeRecGG(){
+  const M=document.querySelector("main");
+  const land=window.innerWidth>window.innerHeight;
+  let s;
+  if(land){ // 横画面: 左=摩擦円 / 右=カメラ・メーター・ボタン
+    s=Math.min(M.clientHeight-22,Math.floor(M.clientWidth*0.52),470);
+  }else{    // 縦画面: 他要素の実寸を引いた残り高さいっぱいに円を表示
+    const H=id=>{const e=$(id);return e?e.getBoundingClientRect().height:0;};
+    const used=H("recBar")+H("camWrap")+H("meters")+H("smoothRow")+H("btnRec")+H("saveCard")+58;
+    s=Math.min(M.clientWidth-20,M.clientHeight-used,470);
+  }
+  ggRec.setSize(Math.max(160,Math.floor(s)));
+}
+window.addEventListener("resize",()=>{sizeRecGG();sizeRep();});
+
+/* ================= センサー・許可 ================= */
+const perm={motion:false,gps:false,cam:false};
+let camStream=null,gpsWatch=null,lastGps=null;
+/* 軸の考え方(自動):
+   - 記録開始カウントダウン中の静止データから重力方向(=上下)を検出
+   - スマホは画面を運転者側(車両後方)へ向けて固定する前提。
+     端末の-Z軸(画面の裏方向)=車両前方 とみなし、水平面へ投影して前後軸を決定
+   - 加速で加速度Zがマイナスに出る向きを「上=加速」として表示(符号反転済み)
+   - iOSはセンサー符号が逆のため自動補正(AXSIGN) */
+const AXSIGN=(typeof DeviceMotionEvent!=="undefined"&&
+  typeof DeviceMotionEvent.requestPermission==="function")?-1:1;
+let f0=null,uV=null,fwd3=null,rgt3=null; // キャリブレーション基底
+let latestG=null;                        // [横G, 前後G]
+let motionSeen=false,lastMotion=null;
+
+function buildBasis(){
+  if(!set.calib)return;
+  f0=set.calib.f0;
+  const n=Math.hypot(f0.x,f0.y,f0.z)||1;
+  uV={x:f0.x/n,y:f0.y/n,z:f0.z/n};
+  // 前方向 = -Z軸を水平面へ投影
+  let dp=uV.z,fx=dp*uV.x,fy=dp*uV.y,fz=dp*uV.z-1;
+  let fn=Math.hypot(fx,fy,fz);
+  if(fn<0.25){ // 画面がほぼ真上向き: -Y軸を前方向に
+    dp=uV.y;fx=dp*uV.x;fy=dp*uV.y-1;fz=dp*uV.z;fn=Math.hypot(fx,fy,fz)||1;
+  }
+  fwd3={x:fx/fn,y:fy/fn,z:fz/fn};
+  rgt3={x:fwd3.y*uV.z-fwd3.z*uV.y,
+        y:fwd3.z*uV.x-fwd3.x*uV.z,
+        z:fwd3.x*uV.y-fwd3.y*uV.x};
+}
+function vehicleG(f){ // 正規化済みセンサー値 -> [横G, 前後G]
+  if(!f0||!fwd3||f.x==null)return null;
+  const hx=f.x-f0.x,hy=f.y-f0.y,hz=f.z-f0.z;
+  const dp=hx*uV.x+hy*uV.y+hz*uV.z;
+  const px=hx-dp*uV.x,py=hy-dp*uV.y,pz=hz-dp*uV.z;
+  let lon=(px*fwd3.x+py*fwd3.y+pz*fwd3.z)/G0;
+  let lat=(px*rgt3.x+py*rgt3.y+pz*rgt3.z)/G0;
+  if(set.flip)lat=-lat;
+  if(set.flipLon)lon=-lon;
+  return[lat,lon];
+}
+const nf=f=>({x:AXSIGN*f.x,y:AXSIGN*f.y,z:AXSIGN*f.z});
+
+/* ---- なめらかさフィルタ (メディアン3=段差スパイク除去 + EMA=振動平滑化) ---- */
+const med3=(a,b,c)=>Math.max(Math.min(a,b),Math.min(Math.max(a,b),c));
+const tauOf=v=>(v/100)*(v/100)*0.8; // スライダー0-100 → 時定数0〜0.8秒
+function newFState(){return{h:[],e:null};}
+function stepF(st,la,lo,dt,tau){
+  if(tau<=0){st.h=[];st.e=[la,lo];return st.e;} // スライダー0=完全に生データ
+  st.h.push([la,lo]);if(st.h.length>3)st.h.shift();
+  const n=st.h.length;
+  const ml=n<3?la:med3(st.h[0][0],st.h[1][0],st.h[2][0]);
+  const mo=n<3?lo:med3(st.h[0][1],st.h[1][1],st.h[2][1]);
+  const a=dt/(tau+dt);
+  st.e=st.e?[st.e[0]+a*(ml-st.e[0]),st.e[1]+a*(mo-st.e[1])]:[ml,mo];
+  return st.e;
+}
+function smoothArr(S,rate,val){ // 再生用: 生サンプル配列を一括平滑化
+  const tau=tauOf(val);
+  if(tau<=0||S.length<3)return S;
+  const dt=1/(rate||25),a=dt/(tau+dt);
+  const out=new Array(S.length);
+  let e0=S[0][1],e1=S[0][2];
+  for(let i=0;i<S.length;i++){
+    const i0=Math.max(0,i-1),i2=Math.min(S.length-1,i+1);
+    const ml=med3(S[i0][1],S[i][1],S[i2][1]);
+    const mo=med3(S[i0][2],S[i][2],S[i2][2]);
+    e0+=a*(ml-e0);e1+=a*(mo-e1);
+    out[i]=[S[i][0],e0,e1];
+  }
+  return out;
+}
+let dispF=newFState(),lastFrame=0;
+window.addEventListener("devicemotion",ev=>{
+  motionSeen=true;
+  const raw=ev.accelerationIncludingGravity;
+  if(!raw||raw.x==null)return;
+  const f=nf(raw);
+  lastMotion={x:f.x,y:f.y,z:f.z,t:performance.now()};
+  const g=vehicleG(f);if(g)latestG=g;
+});
+
+async function requestPerms(){
+  // motion (iOS needs explicit request in user gesture)
+  try{
+    if(typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function"){
+      const r=await DeviceMotionEvent.requestPermission();
+      perm.motion=(r==="granted");
+    }else perm.motion=true;
+  }catch(e){perm.motion=false;}
+  // gps
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(()=>{perm.gps=true;updateStat();},()=>{perm.gps=false;updateStat();},{enableHighAccuracy:true,timeout:8000});
+    startGpsWatch();
+  }
+  // camera
+  await startCamPreview();
+  updateStat();
+}
+$("btnPerm").addEventListener("click",requestPerms);
+
+function startGpsWatch(){
+  if(gpsWatch!=null||!navigator.geolocation)return;
+  gpsWatch=navigator.geolocation.watchPosition(p=>{
+    perm.gps=true;
+    lastGps={t:performance.now(),lat:p.coords.latitude,lon:p.coords.longitude,
+             spd:p.coords.speed!=null?p.coords.speed*3.6:null};
+    if(rec.on&&!set.demo)rec.gps.push([Math.round(performance.now()-rec.t0),
+        +p.coords.latitude.toFixed(6),+p.coords.longitude.toFixed(6),
+        p.coords.speed!=null?+(p.coords.speed*3.6).toFixed(1):null]);
+  },()=>{},{enableHighAccuracy:true,maximumAge:500});
+}
+async function startCamPreview(){
+  const wrap=$("camWrap");
+  if(!set.useCam){wrap.style.display="none";return;}
+  if(camStream){wrap.style.display="block";return;}
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia(
+      {video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}},audio:true});
+    $("camPrev").srcObject=camStream;
+    perm.cam=true;wrap.style.display="block";
+  }catch(e){perm.cam=false;wrap.style.display="none";}
+  updateStat();
+}
+
+/* ================= デモシミュレータ ================= */
+function demoStepper(ph){
+  let lat=36.5645,lon=139.9005,hdg=0,v=22,t=0;
+  const p=ph||0;
+  return{
+    step(dt){
+      t+=dt;
+      const m=set.carMaxG,u=t+p;
+      let la=m*0.92*Math.sin(u*0.55)*Math.sin(u*0.21+1.2);
+      let lo=m*0.75*Math.sin(u*0.33+2.1)*Math.cos(u*0.12);
+      la+=(Math.sin(u*7.3)+Math.sin(u*11.1))*0.015;
+      lo+=(Math.sin(u*8.1)+Math.sin(u*12.7))*0.012;
+      const g=Math.hypot(la,lo);
+      if(g>m*1.02){la*=m*1.02/g;lo*=m*1.02/g;}
+      v=Math.max(8,Math.min(52,v+lo*G0*dt));
+      hdg+=la*G0/v*dt;
+      lat+=v*Math.cos(hdg)*dt/111320;
+      lon+=v*Math.sin(hdg)*dt/(111320*Math.cos(lat*Math.PI/180));
+      return{g:[la,lo],lat,lon,spd:v*3.6,t};
+    }
+  };
+}
+function genDemoJson(sec,ph){
+  const st=demoStepper(ph),rate=25,samples=[],gps=[];
+  for(let i=0;i<sec*rate;i++){
+    const s=st.step(1/rate);
+    samples.push([Math.round(s.t*1000),+s.g[0].toFixed(3),+s.g[1].toFixed(3)]);
+    if(i%rate===0)gps.push([Math.round(s.t*1000),+s.lat.toFixed(6),+s.lon.toFixed(6),+s.spd.toFixed(1)]);
+  }
+  return{app:"friction-circle-recorder",version:1,date:new Date().toISOString(),
+    car:{name:set.carName,maxG:set.carMaxG},rate,samples,gps};
+}
+
+/* ================= 記録 ================= */
+const rec={on:false,t0:0,samples:[],gps:[],peak:0,mr:null,chunks:[],videoBlob:null,videoExt:"webm",
+           jsonBlob:null,timer:null,demo:null,wake:null};
+$("btnRec").addEventListener("click",()=>rec.on?stopRec():startRec());
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+let counting=false;
+
+async function startRec(){
+  if(counting)return;
+  if(!set.demo){
+    if(!motionSeen){alert("センサー値が届いていません。設定タブの「許可をやり直す」を押してください。\n(パソコンで試す場合は設定のデモモードをONに)");return;}
+    // 3・2・1カウントダウン中に自動キャリブレーション(停車状態の重力を計測)
+    counting=true;$("btnRec").disabled=true;
+    const acc=[];
+    const h=ev=>{const r=ev.accelerationIncludingGravity;
+      if(r&&r.x!=null){const f=nf(r);acc.push([f.x,f.y,f.z]);}};
+    window.addEventListener("devicemotion",h);
+    $("cnt").style.display="flex";
+    for(let n=3;n>=1;n--){$("cntNum").textContent=n;await wait(1000);}
+    $("cnt").style.display="none";
+    window.removeEventListener("devicemotion",h);
+    counting=false;$("btnRec").disabled=false;
+    if(acc.length<10){alert("センサー値を取得できませんでした。もう一度お試しください。");return;}
+    const m=acc.reduce((s,v)=>[s[0]+v[0],s[1]+v[1],s[2]+v[2]],[0,0,0]).map(v=>v/acc.length);
+    set.calib={f0:{x:m[0],y:m[1],z:m[2]}};
+    saveSet();buildBasis();
+  }
+  rec.on=true;rec.samples=[];rec.gps=[];rec.peak=0;rec.chunks=[];
+  rec.videoBlob=null;rec.jsonObj=null;
+  rec.t0=performance.now();
+  rec.demo=set.demo?demoStepper():null;
+  rec.f=newFState();rec.prevS=null;
+  ggRec.clearHist();ggRec.trail=[];
+  $("btnRec").textContent="■ 記録停止";$("saveCard").style.display="none";
+  $("recBadge").style.display="none";updateCamTgl();sizeRecGG();
+  startGpsWatch();
+  // camera
+  if(set.useCam&&camStream&&!set.demo){
+    const mt=["video/mp4;codecs=avc1","video/mp4","video/webm;codecs=vp9","video/webm"]
+      .find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported(m));
+    if(mt){
+      rec.videoExt=mt.includes("mp4")?"mp4":"webm";
+      try{
+        rec.videoLag=null;
+        rec.mr=new MediaRecorder(camStream,{mimeType:mt,videoBitsPerSecond:2500000});
+        rec.mr.ondataavailable=e=>{if(e.data.size)rec.chunks.push(e.data);};
+        rec.mr.onstart=()=>{rec.videoLag=(performance.now()-rec.t0)/1000;};
+        rec.mr.start(1000);
+        $("recBadge").style.display="block";
+      }catch(e){rec.mr=null;}
+    }
+  }
+  try{rec.wake=await navigator.wakeLock.request("screen");}catch(e){}
+  // sampling loop
+  const dt=1/set.rate;
+  rec.timer=setInterval(()=>{
+    const t=performance.now()-rec.t0;
+    let g=latestG;
+    if(rec.demo){
+      const s=rec.demo.step(dt);g=s.g;
+      lastGps={t:performance.now(),lat:s.lat,lon:s.lon,spd:s.spd};
+      if(Math.floor(s.t)>Math.floor(s.t-dt))
+        rec.gps.push([Math.round(t),+s.lat.toFixed(6),+s.lon.toFixed(6),+s.spd.toFixed(1)]);
+    }
+    if(!g)return;
+    const p=[+g[0].toFixed(3),+g[1].toFixed(3)];
+    rec.samples.push([Math.round(t),p[0],p[1]]); // 保存は生データのまま
+    const s=stepF(rec.f,p[0],p[1],dt,tauOf(set.smooth)); // 表示・履歴は平滑化
+    if(rec.prevS)ggRec.histSeg(rec.prevS,[s[0],s[1]]);
+    rec.prevS=[s[0],s[1]];
+    rec.peak=Math.max(rec.peak,Math.hypot(s[0],s[1]));
+  },1000*dt);
+}
+function stopRec(){
+  rec.on=false;clearInterval(rec.timer);
+  $("btnRec").textContent="● 記録開始";$("recBadge").style.display="none";updateCamTgl();
+  if(rec.wake){rec.wake.release().catch(()=>{});rec.wake=null;}
+  const fin=()=>{
+    rec.jsonObj={app:"friction-circle-recorder",version:1,date:new Date().toISOString(),
+      car:{name:set.carName,maxG:set.carMaxG},rate:set.rate,samples:rec.samples,gps:rec.gps};
+    if(rec.videoLag!=null)rec.jsonObj.videoLag=+rec.videoLag.toFixed(2);
+    rec.jsonObj.smooth=set.smooth;
+    $("saveCard").style.display="block";sizeRecGG();
+    autoSaveRec();
+    $("btnDlVideo").disabled=!rec.videoBlob;
+    $("btnDlVideo").textContent=rec.videoBlob?
+      "動画を保存("+(rec.videoBlob.size/1048576).toFixed(1)+"MB)":"動画なし";
+  };
+  if(rec.mr&&rec.mr.state!=="inactive"){
+    rec.mr.onstop=()=>{rec.videoBlob=new Blob(rec.chunks,{type:rec.chunks[0]?.type||"video/webm"});fin();};
+    rec.mr.stop();
+  }else fin();
+}
+function saveMsg(t){const e=$("saveMsg");if(e)e.textContent=t;}
+async function dl(blob,name){
+  /* Fusion-Dashと同じ三段構えの保存方式:
+     ① まず共有シート(Web Share API)でファイルを渡す(iPhoneはこれが確実)
+     ② ダメならダウンロード(PC/Android)
+     ③ 最終手段: テキストデータなら新規タブに表示 */
+  try{
+    const file=new File([blob],name,{type:blob.type||"application/octet-stream"});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:name});
+      saveMsg("共有シートから保存/送信できます");
+      return;
+    }
+  }catch(e){
+    if(e&&e.name==="AbortError"){saveMsg("共有をキャンセルしました");return;}
+    /* 共有不可 → 下のフォールバックへ */
+  }
+  try{
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+    saveMsg("保存しました: "+name);
+    return;
+  }catch(e){}
+  if((blob.type||"").includes("json")){
+    try{
+      const text=await blob.text();
+      const w=window.open("","_blank");
+      if(w){w.document.write("<pre style='white-space:pre-wrap;word-break:break-all;font:12px monospace'>"+
+        text.replace(/</g,"&lt;")+"</pre>");w.document.title=name;
+        saveMsg("新規タブに表示しました(長押しでコピー/共有)");return;}
+    }catch(e){}
+  }
+  saveMsg("保存に失敗しました。ブラウザの設定を確認してください");
+}
+
+/* ---- ブラウザ内保存 (IndexedDB): ファイル保存が制限された端末向け ---- */
+let db=null;
+function openDB(){return new Promise((res,rej)=>{
+  if(db)return res(db);
+  const q=indexedDB.open("fcdb",1);
+  q.onupgradeneeded=e=>{const d=e.target.result;
+    d.createObjectStore("recs",{keyPath:"id"});
+    d.createObjectStore("vids",{keyPath:"id"});};
+  q.onsuccess=()=>{db=q.result;res(db);};
+  q.onerror=()=>rej(q.error);});}
+async function dbPut(st,v){const d=await openDB();return new Promise((res,rej)=>{
+  const tx=d.transaction(st,"readwrite");tx.objectStore(st).put(v);
+  tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);});}
+async function dbGet(st,id){const d=await openDB();return new Promise((res,rej)=>{
+  const q=d.transaction(st).objectStore(st).get(id);
+  q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}
+async function dbAll(st){const d=await openDB();return new Promise((res,rej)=>{
+  const q=d.transaction(st).objectStore(st).getAll();
+  q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error);});}
+async function dbDel(st,id){const d=await openDB();return new Promise((res,rej)=>{
+  const tx=d.transaction(st,"readwrite");tx.objectStore(st).delete(id);
+  tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);});}
+
+async function autoSaveRec(){
+  try{
+    const id=Date.now().toString(36);
+    rec.savedId=id;
+    await dbPut("recs",{id,date:rec.jsonObj.date,name:($("recName").value||"").trim(),
+      dur:rec.samples.length?rec.samples[rec.samples.length-1][0]:0,
+      hasVid:!!rec.videoBlob,ext:rec.videoExt,json:rec.jsonObj});
+    if(rec.videoBlob){
+      try{await dbPut("vids",{id,blob:rec.videoBlob});}
+      catch(e){saveMsg("ブラウザ内に自動保存しました(動画は容量制限で保存できず)");return;}
+    }
+    saveMsg("ブラウザ内に自動保存しました。ファイル保存できない端末でも、再生タブの「保存済みの記録」から開けます");
+  }catch(e){saveMsg("ブラウザ内保存に失敗しました: "+e);}
+}
+$("recName").addEventListener("change",async e=>{
+  const n=e.target.value.trim();
+  if(rec.jsonObj)rec.jsonObj.name=n||undefined;
+  if(rec.savedId){try{const m=await dbGet("recs",rec.savedId);
+    if(m){m.name=n;await dbPut("recs",m);}}catch(_){}}
+});
+$("btnCopyJson").addEventListener("click",async()=>{
+  if(!rec.jsonObj)return;
+  const n=($("recName").value||"").trim();if(n)rec.jsonObj.name=n;
+  try{
+    await navigator.clipboard.writeText(JSON.stringify(rec.jsonObj));
+    saveMsg("データをコピーしました。メモ・Teams・メール等に貼り付けて退避できます");
+  }catch(e){saveMsg("コピーできませんでした: "+e);}
+});
+
+async function renderSavedList(){
+  const box=$("savedList");if(!box)return;
+  let items=[];
+  try{items=await dbAll("recs");}catch(e){
+    box.innerHTML="<span style='color:var(--ink3);font-size:11px'>この環境ではブラウザ内保存を利用できません</span>";return;}
+  items.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  if(!items.length){
+    box.innerHTML="<span style='color:var(--ink3);font-size:11px'>ブラウザ内に保存された記録はまだありません(記録停止時に自動保存されます)</span>";return;}
+  box.innerHTML="";
+  for(const it of items){
+    const row=document.createElement("div");row.className="savedRow";
+    const sl=document.createElement("span");sl.className="sl";
+    sl.textContent=(it.name||"無題")+" ─ "+(it.date||"").slice(5,16).replace("T"," ")
+      +" / "+Math.round((it.dur||0)/1000)+"秒"+(it.hasVid?" / 動画あり":"");
+    row.appendChild(sl);
+    const mk=(t,fn)=>{const b=document.createElement("button");b.textContent=t;
+      b.addEventListener("click",fn);row.appendChild(b);};
+    mk("読込",async()=>{
+      let v=null;
+      if(it.hasVid){try{v=await dbGet("vids",it.id);}catch(_){}}
+      if(v&&v.blob){rpV.src=URL.createObjectURL(v.blob);rpV.style.display="block";
+        rpV.playbackRate=R.speed;$("rpBody").classList.add("hasVid");}
+      else{rpV.removeAttribute("src");rpV.style.display="none";$("rpBody").classList.remove("hasVid");}
+      loadData(JSON.parse(JSON.stringify(it.json)));
+    });
+    mk("Bとして",()=>loadDataB(JSON.parse(JSON.stringify(it.json))));
+    mk("書き出し",()=>dl(new Blob([JSON.stringify(it.json)],{type:"application/json"}),
+      "fc_"+(it.name?it.name.replace(/\s+/g,"_")+"_":"")+(it.date||"").slice(0,10)+".json"));
+    mk("削除",async()=>{
+      if(!confirm("この記録を削除しますか?"))return;
+      await dbDel("recs",it.id);try{await dbDel("vids",it.id);}catch(_){}
+      renderSavedList();
+    });
+    box.appendChild(row);
+  }
+}
+$("btnPasteTgl").addEventListener("click",()=>{
+  const a=$("pasteArea");a.style.display=a.style.display==="none"?"block":"none";});
+$("btnPasteLoad").addEventListener("click",()=>{
+  try{loadData(JSON.parse($("pasteText").value.trim()));$("pasteText").value="";}
+  catch(e){alert("読み込めませんでした。コピーしたデータ全体を貼り付けてください。("+e+")");}
+});
+function stamp(){const d=new Date(),z=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+"_"+z(d.getHours())+z(d.getMinutes());}
+const safeName=()=>{const n=($("recName").value||"").trim()
+  .replace(/[\\\/:*?"<>|\s]+/g,"_").slice(0,40);return n?"_"+n:"";};
+$("btnDlJson").addEventListener("click",()=>{if(!rec.jsonObj)return;
+  const n=($("recName").value||"").trim();
+  if(n)rec.jsonObj.name=n;else delete rec.jsonObj.name;
+  dl(new Blob([JSON.stringify(rec.jsonObj)],{type:"application/json"}),
+     "fc_"+stamp()+safeName()+".json");});
+$("btnDlVideo").addEventListener("click",()=>rec.videoBlob&&
+  dl(rec.videoBlob,"fc_"+stamp()+safeName()+"."+rec.videoExt));
+
+/* record-screen render loop */
+function fmtT(ms){const s=Math.floor(ms/1000);return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
+function recLoop(){
+  requestAnimationFrame(recLoop);
+  if(!$("vRec").classList.contains("on"))return;
+  const now=performance.now();
+  const dtF=Math.min(0.2,(now-lastFrame)/1000||0.04);lastFrame=now;
+  let raw=null;
+  if(rec.on&&rec.samples.length){const l=rec.samples[rec.samples.length-1];raw=[l[1],l[2]];}
+  else if(latestG)raw=[latestG[0],latestG[1]];
+  const cur=raw?stepF(dispF,raw[0],raw[1],dtF,tauOf(set.smooth)):null;
+  if(cur){
+    ggRec.cur=cur;
+    ggRec.trail.push([cur[0],cur[1],now]);
+    while(ggRec.trail.length&&now-ggRec.trail[0][2]>3000)ggRec.trail.shift();
+    const use=Math.hypot(cur[0],cur[1])/set.carMaxG*100;
+    $("mUseV").textContent=Math.round(use);
+  }
+  ggRec.redraw();
+  $("mSpd").textContent=(lastGps&&lastGps.spd!=null&&performance.now()-lastGps.t<5000)?
+      Math.round(lastGps.spd):"--";
+  $("mPeak").textContent=rec.peak.toFixed(2);
+  $("mTime").textContent=rec.on?fmtT(performance.now()-rec.t0):"0:00";
+}
+
+/* ================= 再生 ================= */
+const R={data:null,playing:false,clock:0,speed:1,offset:0,dur:0,sm:30,lastT:0,
+  stripCv:null,map:null,marker:null,marker2:null,mapCanvas:false,lastRAF:0,
+  b:{data:null,maxG:1,off:0}};
+const ggRep=createGG($("ggRep"));
+const rpV=$("rpVideo");
+const BCOL=["#34d399","#fbbf24","#f43f5e"];
+
+function setLoadMini(on){
+  $("loadCard").classList.toggle("mini",on);
+  $("loadTglV").textContent=on?"開く ▼":"たたむ ▲";
+  sizeRep();
+}
+$("loadTgl").addEventListener("click",()=>setLoadMini(!$("loadCard").classList.contains("mini")));
+$("btnLoadJson").addEventListener("click",()=>$("fJson").click());
+$("btnLoadVideo").addEventListener("click",()=>$("fVideo").click());
+$("fJson").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
+  f.text().then(t=>{try{loadData(JSON.parse(t));}catch(err){alert("読み込めませんでした: "+err);}});
+  e.target.value="";});
+$("fVideo").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
+  rpV.src=URL.createObjectURL(f);rpV.style.display="block";rpV.playbackRate=R.speed;
+  $("rpBody").classList.add("hasVid");sizeRep();
+  e.target.value="";});
+$("btnDemoRep").addEventListener("click",()=>loadData(genDemoJson(120)));
+$("btnLoadJsonB").addEventListener("click",()=>$("fJsonB").click());
+$("fJsonB").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
+  f.text().then(t=>{try{loadDataB(JSON.parse(t));}catch(err){alert("読み込めませんでした: "+err);}});
+  e.target.value="";});
+$("btnDemoRepB").addEventListener("click",()=>loadDataB(genDemoJson(100,7)));
+$("btnClearB").addEventListener("click",clearB);
+$("rpOfsB").addEventListener("input",e=>{
+  R.b.off=parseFloat(e.target.value);
+  $("rpOfsBV").textContent=R.b.off.toFixed(1);
+  buildStrip();});
+
+function loadDataB(j){
+  if(!R.data){alert("先に基準データA(.json)を読み込んでください");return;}
+  if(!j||!Array.isArray(j.samples)||!j.samples.length){alert("データ形式が違います");return;}
+  R.b.data=j;R.b.maxG=(j.car&&j.car.maxG)||set.carMaxG;R.b.off=0;
+  $("rpOfsB").value=0;$("rpOfsBV").textContent="0.0";
+  $("bOffLab").style.display="inline";$("btnClearB").style.display="block";
+  let mx=0;for(const s of j.samples)mx=Math.max(mx,Math.hypot(s[1],s[2]));
+  $("rpInfoB").style.display="block";
+  $("rpInfoB").textContent="比較B: "+(j.name?j.name+" / ":"")+
+    ((j.car&&j.car.name)?j.car.name+" / ":"")+
+    (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
+    "─ "+(j.samples[j.samples.length-1][0]/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G";
+  applySmooth();buildMap();
+}
+function clearB(){
+  R.b.data=null;R.marker2=null;
+  $("bOffLab").style.display="none";$("btnClearB").style.display="none";
+  $("rpInfoB").style.display="none";ggRep.trailB=[];ggRep.curB=null;
+  buildHist();buildStrip();buildMap();
+}
+
+function idxAt(arr,t){let lo=0,hi=arr.length-1;
+  while(lo<hi){const m=(lo+hi+1)>>1;if(arr[m][0]<=t)lo=m;else hi=m-1;}return lo;}
+function usageOf(data,maxG,t){const S=data.S||data.samples,s=S[idxAt(S,t)];
+  return Math.hypot(s[1],s[2])/maxG;}
+function usageAt(t){return usageOf(R.data,set.carMaxG,t);}
+function posOf(g,t){if(!g||!g.length)return null;
+  const i=idxAt(g,t),a=g[i],b=g[Math.min(i+1,g.length-1)];
+  const f=b[0]>a[0]?Math.min(1,(t-a[0])/(b[0]-a[0])):0;
+  return{lat:a[1]+(b[1]-a[1])*f,lon:a[2]+(b[2]-a[2])*f};}
+function posAt(t){return posOf(R.data.gps,t);}
+
+function loadData(j){
+  if(!j||!Array.isArray(j.samples)||!j.samples.length){alert("データ形式が違います");return;}
+  R.data=j;R.clock=0;R.playing=false;
+  if(j.car&&j.car.maxG){set.carMaxG=j.car.maxG;if(j.car.name)set.carName=j.car.name;refreshSetUI();}
+  R.dur=j.samples[j.samples.length-1][0]||1;
+  $("rpBody").style.display="block";
+  $("rpInfo").textContent=(j.name?j.name+" / ":"")+(j.car?j.car.name+" / ":"")+
+    (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
+    "─ "+(R.dur/1000).toFixed(0)+"秒 / GPS点 "+(j.gps?j.gps.length:0);
+  R.offset=(typeof j.videoLag==="number")?Math.max(-3,Math.min(3,j.videoLag)):0;
+  $("rpOfs").value=R.offset;$("rpOfsV").textContent=R.offset.toFixed(1);
+  R.sm=(typeof j.smooth==="number")?j.smooth:set.smooth;
+  $("rpSmooth").value=R.sm;$("rpSmoothV").textContent=R.sm;
+  setLoadMini(true); // 読み込み後はボタン群を折りたたむ
+  sizeRep();applySmooth();buildMap();
+  $("btnPlay").textContent="▶ 再生";
+}
+function updStats(){
+  if(!R.data)return;
+  const S=R.data.S||R.data.samples;
+  let mx=0,sum=0,hi=0;
+  for(const s of S){const g=Math.hypot(s[1],s[2]);mx=Math.max(mx,g);sum+=g;
+    if(g/set.carMaxG>=0.9)hi++;}
+  $("stMax").textContent=mx.toFixed(2)+"G";
+  $("stAvg").textContent=Math.round(sum/S.length/set.carMaxG*100)+"%";
+  $("stHi").textContent=Math.round(hi/(R.data.rate||25))+"s";
+}
+function applySmooth(){
+  if(!R.data)return;
+  R.data.S=smoothArr(R.data.samples,R.data.rate,R.sm);
+  if(R.b.data)R.b.data.S=smoothArr(R.b.data.samples,R.b.data.rate,R.sm);
+  buildHist();buildStrip();updStats();renderAt(R.lastT||0);
+}
+$("rpSmooth").addEventListener("input",e=>{
+  R.sm=+e.target.value;$("rpSmoothV").textContent=R.sm;applySmooth();});
+$("rpSmooth").addEventListener("change",()=>buildMap());
+function sizeRep(){
+  if(!R.data||$("rpBody").style.display==="none")return;
+  const sp=document.querySelector("#vRep .split");
+  const w=(sp?sp.clientWidth:0)||($("vRep").clientWidth-20);
+  const gg=Math.max(150,Math.min(280,Math.floor(w*0.42)));
+  ggRep.setSize(gg);
+  $("rpMap").style.height=gg+"px";
+  if(R.map)setTimeout(()=>R.map.invalidateSize(),50);
+  buildStrip();buildHist();
+  if(R.mapCanvas)drawMapCanvas(R.clock);
+}
+function buildHist(){
+  if(!R.data)return;ggRep.clearHist();
+  const S=R.data.S||R.data.samples,step=Math.max(1,Math.ceil(S.length/4000));
+  for(let i=step;i<S.length;i+=step)
+    ggRep.histSeg([S[i-step][1],S[i-step][2]],[S[i][1],S[i][2]]);
+  if(R.b.data){
+    const B=R.b.data.S||R.b.data.samples,st=Math.max(1,Math.ceil(B.length/4000));
+    for(let i=st;i<B.length;i+=st)
+      ggRep.histSeg([B[i-st][1],B[i-st][2]],[B[i][1],B[i][2]],"rgba(251,146,60,0.26)");
+  }
+}
+function buildStrip(){
+  if(!R.data)return;
+  const cv=$("strip"),d=devicePixelRatio||1;
+  cv.width=Math.max(50,cv.clientWidth)*d;cv.height=64*d;
+  const W=cv.width,H=cv.height;
+  const off=document.createElement("canvas");off.width=W;off.height=H;
+  const c=off.getContext("2d");
+  c.fillStyle="#1d242f";c.fillRect(0,0,W,H);
+  const yOf=u=>H-(Math.min(u,1.2)/1.2)*(H-8*d)-2*d;
+  c.beginPath();c.moveTo(0,H);
+  for(let x=0;x<W;x+=2)c.lineTo(x,yOf(usageAt(x/W*R.dur)));
+  c.lineTo(W,H);c.closePath();
+  c.fillStyle="rgba(56,189,248,0.22)";c.fill();
+  c.strokeStyle="#38bdf8";c.lineWidth=1.5*d;c.beginPath();
+  for(let x=0;x<W;x+=2){const y=yOf(usageAt(x/W*R.dur));x?c.lineTo(x,y):c.moveTo(x,y);}
+  c.stroke();
+  if(R.b.data){
+    const SB=R.b.data.S||R.b.data.samples,durB=SB[SB.length-1][0];
+    c.strokeStyle="#fb923c";c.lineWidth=1.5*d;c.beginPath();let pen=false;
+    for(let x=0;x<W;x+=2){
+      const tB=x/W*R.dur-R.b.off*1000;
+      if(tB<0||tB>durB){pen=false;continue;}
+      const y=yOf(usageOf(R.b.data,R.b.maxG,tB));
+      pen?c.lineTo(x,y):c.moveTo(x,y);pen=true;
+    }
+    c.stroke();
+  }
+  c.strokeStyle="#f43f5e";c.setLineDash([4*d,4*d]);c.lineWidth=1*d;
+  c.beginPath();c.moveTo(0,yOf(1));c.lineTo(W,yOf(1));c.stroke();c.setLineDash([]);
+  c.fillStyle="#8a98a8";c.font=(9*d)+"px sans-serif";
+  c.fillText("摩擦円使用率の推移(赤線=100%) タップでジャンプ",6*d,12*d);
+  R.stripCv=off;
+}
+function drawStrip(t){
+  if(!R.stripCv)return;
+  const cv=$("strip"),c=cv.getContext("2d");
+  c.drawImage(R.stripCv,0,0);
+  const x=t/R.dur*cv.width;
+  c.strokeStyle="#fbbf24";c.lineWidth=2*(devicePixelRatio||1);
+  c.beginPath();c.moveTo(x,0);c.lineTo(x,cv.height);c.stroke();
+}
+function buildMap(){
+  const gps=R.data.gps||[];
+  if(R.map){R.map.remove();R.map=null;R.marker=null;R.marker2=null;}
+  R.mapCanvas=false;
+  const cv=$("rpMapCv");
+  if(gps.length<2){cv.style.display="none";return;}
+  if(window.L){
+    try{
+      cv.style.display="none";
+      R.map=L.map($("rpMap"),{zoomControl:false});
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {maxZoom:19,attribution:"© OpenStreetMap"}).addTo(R.map);
+      let cur=[],curB=-1;const bounds=[];
+      const flush=()=>{if(cur.length>1)L.polyline(cur,{color:BCOL[curB],weight:4,opacity:.9}).addTo(R.map);};
+      for(const p of gps){
+        const u=usageAt(p[0]),b=u<0.6?0:u<0.85?1:2;
+        bounds.push([p[1],p[2]]);
+        if(b!==curB&&cur.length){flush();cur=[cur[cur.length-1]];}
+        curB=b;cur.push([p[1],p[2]]);
+      }
+      flush();
+      if(R.b.data&&R.b.data.gps&&R.b.data.gps.length>1){
+        const bg=R.b.data.gps.map(p=>[p[1],p[2]]);
+        L.polyline(bg,{color:"#fb923c",weight:3,opacity:0.7,dashArray:"6 6"}).addTo(R.map);
+        bounds.push(...bg);
+        R.marker2=L.circleMarker(bg[0],{radius:6,color:"#fff",weight:2,
+          fillColor:"#fb923c",fillOpacity:1}).addTo(R.map);
+      }
+      R.map.fitBounds(bounds,{padding:[12,12]});
+      R.marker=L.circleMarker(bounds[0],{radius:7,color:"#fff",weight:2,
+        fillColor:"#f43f5e",fillOpacity:1}).addTo(R.map);
+      setTimeout(()=>R.map&&R.map.invalidateSize(),100);
+      return;
+    }catch(e){if(R.map){try{R.map.remove();}catch(_){}}R.map=null;}
+  }
+  R.mapCanvas=true;cv.style.display="block";drawMapCanvas(0);
+}
+function drawMapCanvas(tms){
+  if(!R.mapCanvas||!R.data)return;
+  const cv=$("rpMapCv"),d=devicePixelRatio||1,box=$("rpMap");
+  const bw=Math.max(50,box.clientWidth)*d,bh=Math.max(50,box.clientHeight)*d;
+  if(cv.width!==bw||cv.height!==bh){cv.width=bw;cv.height=bh;}
+  const gps=R.data.gps,c=cv.getContext("2d");
+  c.fillStyle="#1d242f";c.fillRect(0,0,bw,bh);
+  const bg=(R.b.data&&R.b.data.gps)||[];
+  let la0=1e9,la1=-1e9,lo0=1e9,lo1=-1e9;
+  for(const p of gps.concat(bg)){la0=Math.min(la0,p[1]);la1=Math.max(la1,p[1]);
+    lo0=Math.min(lo0,p[2]);lo1=Math.max(lo1,p[2]);}
+  const k=Math.cos((la0+la1)/2*Math.PI/180);
+  const sw=(lo1-lo0)*k||1e-6,sh=(la1-la0)||1e-6,pad=16*d;
+  const sc=Math.min((bw-2*pad)/sw,(bh-2*pad)/sh);
+  const X=(lat,lon)=>pad+(lon-lo0)*k*sc+(bw-2*pad-sw*sc)/2;
+  const Y=(lat,lon)=>bh-pad-(lat-la0)*sc-(bh-2*pad-sh*sc)/2;
+  c.lineWidth=3*d;c.lineCap="round";
+  for(let i=1;i<gps.length;i++){
+    const u=usageAt(gps[i][0]);
+    c.strokeStyle=BCOL[u<0.6?0:u<0.85?1:2];
+    c.beginPath();c.moveTo(X(gps[i-1][1],gps[i-1][2]),Y(gps[i-1][1],gps[i-1][2]));
+    c.lineTo(X(gps[i][1],gps[i][2]),Y(gps[i][1],gps[i][2]));c.stroke();
+  }
+  if(bg.length>1){
+    c.setLineDash([5*d,5*d]);c.strokeStyle="#fb923c";c.lineWidth=2*d;
+    c.beginPath();c.moveTo(X(bg[0][1],bg[0][2]),Y(bg[0][1],bg[0][2]));
+    for(let i=1;i<bg.length;i++)c.lineTo(X(bg[i][1],bg[i][2]),Y(bg[i][1],bg[i][2]));
+    c.stroke();c.setLineDash([]);
+  }
+  if(tms!=null&&bg.length){
+    const tB=tms-R.b.off*1000,pb=posOf(bg,Math.max(0,tB));
+    if(pb){c.fillStyle="#fb923c";c.strokeStyle="#fff";c.lineWidth=2*d;
+      c.beginPath();c.arc(X(pb.lat,pb.lon),Y(pb.lat,pb.lon),5*d,0,7);c.fill();c.stroke();}}
+  if(tms!=null){const p=posAt(tms);if(p){
+    c.fillStyle="#f43f5e";c.strokeStyle="#fff";c.lineWidth=2*d;
+    c.beginPath();c.arc(X(p.lat,p.lon),Y(p.lat,p.lon),6*d,0,7);c.fill();c.stroke();}}
+  c.fillStyle="#8a98a8";c.font=(10*d)+"px sans-serif";
+  c.fillText("GPS走行ライン(簡易表示)",8*d,14*d);
+}
+function renderAt(tms){
+  R.lastT=tms;
+  const S=R.data.S||R.data.samples,i=idxAt(S,tms);
+  const trail=[];let j=i;
+  while(j>=0&&tms-S[j][0]<=3000){trail.push([S[j][1],S[j][2],S[j][0]]);j--;}
+  trail.reverse();
+  ggRep.trail=trail;ggRep.cur=[S[i][1],S[i][2]];
+  if(R.b.data){
+    const SB=R.b.data.S||R.b.data.samples,durB=SB[SB.length-1][0],tB=tms-R.b.off*1000;
+    if(tB>=0&&tB<=durB){
+      const ib=idxAt(SB,tB),trB=[];let k=ib;
+      while(k>=0&&tB-SB[k][0]<=3000){trB.push([SB[k][1],SB[k][2],SB[k][0]]);k--;}
+      trB.reverse();ggRep.trailB=trB;ggRep.curB=[SB[ib][1],SB[ib][2]];
+    }else{ggRep.trailB=[];ggRep.curB=null;}
+    if(R.marker2&&R.b.data.gps){
+      const pb=posOf(R.b.data.gps,Math.max(0,Math.min(durB,tB)));
+      if(pb)R.marker2.setLatLng([pb.lat,pb.lon]);}
+  }else{ggRep.trailB=[];ggRep.curB=null;}
+  ggRep.redraw();
+  drawStrip(tms);
+  const p=posAt(tms);
+  if(R.marker&&p)R.marker.setLatLng([p.lat,p.lon]);
+  if(R.mapCanvas)drawMapCanvas(tms);
+  const s=tms/1000;
+  $("rpClock").textContent=Math.floor(s/60)+":"+(s%60).toFixed(1).padStart(4,"0");
+}
+function seek(tms){
+  tms=Math.max(0,Math.min(R.dur,tms));
+  if(rpV.src)rpV.currentTime=Math.max(0,tms/1000-R.offset);
+  else R.clock=tms;
+  renderAt(tms);
+}
+let stripDrag=false;
+$("strip").addEventListener("pointerdown",e=>{stripDrag=true;stripSeek(e);});
+window.addEventListener("pointermove",e=>stripDrag&&stripSeek(e));
+window.addEventListener("pointerup",()=>stripDrag=false);
+function stripSeek(e){
+  if(!R.data)return;
+  const r=$("strip").getBoundingClientRect();
+  seek((e.clientX-r.left)/r.width*R.dur);
+}
+$("btnPlay").addEventListener("click",()=>{
+  if(!R.data)return;
+  if(rpV.src){rpV.paused?rpV.play():rpV.pause();}
+  else{R.playing=!R.playing;R.lastRAF=performance.now();
+    if(R.playing&&R.clock>=R.dur)R.clock=0;}
+});
+$("rpSpeed").addEventListener("change",e=>{
+  R.speed=parseFloat(e.target.value);rpV.playbackRate=R.speed;});
+$("rpOfs").addEventListener("input",e=>{
+  R.offset=parseFloat(e.target.value);$("rpOfsV").textContent=R.offset.toFixed(1);});
+
+function repLoop(){
+  requestAnimationFrame(repLoop);
+  if(!R.data||!$("vRep").classList.contains("on"))return;
+  let tms;
+  if(rpV.src){tms=(rpV.currentTime+R.offset)*1000;R.playing=!rpV.paused&&!rpV.ended;}
+  else{
+    const now=performance.now();
+    if(R.playing){R.clock=Math.min(R.dur,R.clock+(now-R.lastRAF)*R.speed);
+      if(R.clock>=R.dur)R.playing=false;}
+    R.lastRAF=now;tms=R.clock;
+  }
+  renderAt(Math.max(0,Math.min(R.dur,tms)));
+  $("btnPlay").textContent=R.playing?"❚❚ 一時停止":"▶ 再生";
+}
+requestAnimationFrame(repLoop);
+
+/* ================= 起動 ================= */
+loadSet();buildBasis();refreshSetUI();sizeRecGG();recLoop();
+$("btnStart").addEventListener("click",()=>{
+  $("splash").style.display="none";
+  requestPerms(); // 起動時にセンサー・カメラ・GPSの許可をまとめて要求
+});
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist().catch(()=>{});}catch(e){}
+document.addEventListener("visibilitychange",()=>{
+  if(!document.hidden&&rec.on)navigator.wakeLock?.request("screen").then(w=>rec.wake=w).catch(()=>{});
+});
+</script>
+</body>
+</html>
