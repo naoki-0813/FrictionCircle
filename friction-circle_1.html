@@ -46,9 +46,12 @@
       padding:3px 10px;border-radius:6px;display:none}
   .meters{display:flex;justify-content:space-around;text-align:center;margin:2px 0 4px}
   .meters .l{font-size:10px;color:var(--ink3)}
-  .meters .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
-  .meters .u{font-size:11px;color:var(--ink3)}
-  #mUse .v{color:var(--accent2)}
+  .meters .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+  .meters .u{font-size:9px;color:var(--ink3)}
+  .meters .use .v{color:var(--accent2);font-size:24px}
+  .meters .vb{display:none;font-size:14px;font-weight:700;color:#fb923c;font-variant-numeric:tabular-nums}
+  #rpMeters.cmp .vb{display:block}
+  #rpMeters.cmp .v{color:var(--accent)} /* 比較時: A=青 / B=橙 */
   #ggWrap{display:flex;justify-content:center;align-items:center;margin:2px 0 6px}
   canvas.gg{border-radius:12px;background:#10151d;touch-action:none}
   #calWarn{font-size:10px;color:var(--accent2);text-align:left;line-height:1.5;flex:1}
@@ -72,7 +75,7 @@
       column-gap:8px;align-items:start}
     #rpBody.hasVid #rpVideo{max-height:44vh;margin:0}
     #rpBody.hasVid .split{margin-top:0}
-    #rpBody.hasVid #stripBox,#rpBody.hasVid .ctrlRow,
+    #rpBody.hasVid #stripBox,#rpBody.hasVid .ctrlRow,#rpBody.hasVid #rpMeters,
     #rpBody.hasVid .statsRow,#rpBody.hasVid > .note{grid-column:1/3}
   }
   .camTgl{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
@@ -139,7 +142,9 @@
     <div id="camWrap"><video id="camPrev" autoplay muted playsinline></video><div id="recBadge">● REC</div></div>
     <div class="meters" id="meters">
       <div><div class="l">速度</div><div class="v" id="mSpd">--</div><div class="u">km/h</div></div>
-      <div id="mUse"><div class="l">摩擦円使用率</div><div class="v" id="mUseV">0</div><div class="u">%</div></div>
+      <div class="use"><div class="l">摩擦円使用率</div><div class="v" id="mUseV">0</div><div class="u">%</div></div>
+      <div><div class="l">前後G</div><div class="v" id="mLon">0.00</div><div class="u">+加速/-減速</div></div>
+      <div><div class="l">横G</div><div class="v" id="mLat">0.00</div><div class="u">+右/-左</div></div>
       <div><div class="l">ピーク</div><div class="v" id="mPeak">0.00</div><div class="u">G</div></div>
       <div><div class="l">記録時間</div><div class="v" id="mTime">0:00</div><div class="u">min:sec</div></div>
     </div>
@@ -199,6 +204,12 @@
         <div id="rpGGbox"><canvas id="ggRep" class="gg"></canvas></div>
         <div id="rpMap"><canvas id="rpMapCv"></canvas></div>
       </div>
+      <div class="meters" id="rpMeters" style="margin-top:8px">
+        <div><div class="l">速度</div><div class="v" id="rMSpd">--</div><div class="vb" id="rMSpdB">--</div><div class="u">km/h</div></div>
+        <div class="use"><div class="l">摩擦円使用率</div><div class="v" id="rMUse">0</div><div class="vb" id="rMUseB">--</div><div class="u">%</div></div>
+        <div><div class="l">前後G</div><div class="v" id="rMLon">0.00</div><div class="vb" id="rMLonB">--</div><div class="u">+加速/-減速</div></div>
+        <div><div class="l">横G</div><div class="v" id="rMLat">0.00</div><div class="vb" id="rMLatB">--</div><div class="u">+右/-左</div></div>
+      </div>
       <div id="stripBox"><canvas id="strip"></canvas></div>
       <div class="ctrlRow">
         <button class="pb" id="btnPlay">▶ 再生</button>
@@ -218,8 +229,8 @@
         <div class="stat"><div class="l">平均使用率</div><div class="v" id="stAvg">-</div></div>
         <div class="stat"><div class="l">90%超の時間</div><div class="v" id="stHi">-</div></div>
       </div>
-      <div class="note">地図の走行ラインの色: <span class="ok">■緑=使用率60%未満</span> / <span style="color:var(--accent2)">■黄=60〜85%</span> / <span class="bad">■赤=85%以上</span>。グラフをタップするとその瞬間にジャンプします。<br>
-      比較時: <span style="color:var(--accent)">■青=基準データA</span> / <span style="color:#fb923c">■橙=比較データB</span>。スタートのズレは「B開始補正」で合わせます(+でBを遅らせる)。</div>
+      <div class="note">地図の走行ラインの色(単独時): <span class="ok">■緑=使用率60%未満</span> / <span style="color:var(--accent2)">■黄=60〜85%</span> / <span class="bad">■赤=85%以上</span>。グラフをタップするとその瞬間にジャンプします。<br>
+      比較時は摩擦円・地図・グラフすべて <span style="color:var(--accent)">■青=基準データA</span> / <span style="color:#fb923c">■橙=比較データB</span> に統一されます。スタートのズレは「B開始補正」で合わせます(+でBを遅らせる)。</div>
     </div>
     <input type="file" id="fJson" accept=".json,application/json">
     <input type="file" id="fJsonB" accept=".json,application/json">
@@ -385,8 +396,8 @@ function createGG(canvas){
     const dot=(p,fill,r)=>{const[a,b]=XY(p[0],p[1]);
       ctx.fillStyle=fill;ctx.strokeStyle="#0e1116";ctx.lineWidth=2*d;
       ctx.beginPath();ctx.arc(a,b,r*d,0,7);ctx.fill();ctx.stroke();};
-    if(o.curB)dot(o.curB,"#fb923c",6);
-    if(o.cur)dot(o.cur,"#fbbf24",7);
+    if(o.curB)dot(o.curB,"#fb923c",6); // B=橙(軌跡と同色)
+    if(o.cur)dot(o.cur,"#38bdf8",7);   // A=青(軌跡と同色)
   };
   return o;
 }
@@ -748,6 +759,13 @@ $("btnCopyJson").addEventListener("click",async()=>{
 
 async function renderSavedList(){
   const box=$("savedList");if(!box)return;
+  try{ // 使用量/上限の目安を表示
+    if(navigator.storage&&navigator.storage.estimate){
+      const es=await navigator.storage.estimate();
+      const f=v=>v>=1073741824?(v/1073741824).toFixed(1)+"GB":Math.max(1,Math.round(v/1048576))+"MB";
+      $("savedHead").textContent="保存済みの記録(ブラウザ内) ─ 使用 "+f(es.usage||0)+" / 上限目安 "+f(es.quota||0);
+    }
+  }catch(e){}
   let items=[];
   try{items=await dbAll("recs");}catch(e){
     box.innerHTML="<span style='color:var(--ink3);font-size:11px'>この環境ではブラウザ内保存を利用できません</span>";return;}
@@ -817,6 +835,8 @@ function recLoop(){
     while(ggRec.trail.length&&now-ggRec.trail[0][2]>3000)ggRec.trail.shift();
     const use=Math.hypot(cur[0],cur[1])/set.carMaxG*100;
     $("mUseV").textContent=Math.round(use);
+    $("mLon").textContent=(cur[1]>=0?"+":"")+cur[1].toFixed(2);
+    $("mLat").textContent=(cur[0]>=0?"+":"")+cur[0].toFixed(2);
   }
   ggRec.redraw();
   $("mSpd").textContent=(lastGps&&lastGps.spd!=null&&performance.now()-lastGps.t<5000)?
@@ -866,6 +886,7 @@ function loadDataB(j){
   R.b.data=j;R.b.maxG=(j.car&&j.car.maxG)||set.carMaxG;R.b.off=0;
   $("rpOfsB").value=0;$("rpOfsBV").textContent="0.0";
   $("bOffLab").style.display="inline";$("btnClearB").style.display="block";
+  $("rpMeters").classList.add("cmp");
   let mx=0;for(const s of j.samples)mx=Math.max(mx,Math.hypot(s[1],s[2]));
   $("rpInfoB").style.display="block";
   $("rpInfoB").textContent="比較B: "+(j.name?j.name+" / ":"")+
@@ -878,6 +899,7 @@ function clearB(){
   R.b.data=null;R.marker2=null;
   $("bOffLab").style.display="none";$("btnClearB").style.display="none";
   $("rpInfoB").style.display="none";ggRep.trailB=[];ggRep.curB=null;
+  $("rpMeters").classList.remove("cmp");
   buildHist();buildStrip();buildMap();
 }
 
@@ -889,7 +911,8 @@ function usageAt(t){return usageOf(R.data,set.carMaxG,t);}
 function posOf(g,t){if(!g||!g.length)return null;
   const i=idxAt(g,t),a=g[i],b=g[Math.min(i+1,g.length-1)];
   const f=b[0]>a[0]?Math.min(1,(t-a[0])/(b[0]-a[0])):0;
-  return{lat:a[1]+(b[1]-a[1])*f,lon:a[2]+(b[2]-a[2])*f};}
+  return{lat:a[1]+(b[1]-a[1])*f,lon:a[2]+(b[2]-a[2])*f,
+    spd:(a[3]!=null&&b[3]!=null)?a[3]+(b[3]-a[3])*f:a[3]};}
 function posAt(t){return posOf(R.data.gps,t);}
 
 function loadData(j){
@@ -1003,15 +1026,20 @@ function buildMap(){
       R.map=L.map($("rpMap"),{zoomControl:false});
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         {maxZoom:19,attribution:"© OpenStreetMap"}).addTo(R.map);
-      let cur=[],curB=-1;const bounds=[];
-      const flush=()=>{if(cur.length>1)L.polyline(cur,{color:BCOL[curB],weight:4,opacity:.9}).addTo(R.map);};
-      for(const p of gps){
-        const u=usageAt(p[0]),b=u<0.6?0:u<0.85?1:2;
-        bounds.push([p[1],p[2]]);
-        if(b!==curB&&cur.length){flush();cur=[cur[cur.length-1]];}
-        curB=b;cur.push([p[1],p[2]]);
+      const cmp=!!(R.b.data&&R.b.data.gps&&R.b.data.gps.length>1);
+      const bounds=gps.map(p=>[p[1],p[2]]);
+      if(cmp){ // 比較時: Aは摩擦円と同じ青の実線
+        L.polyline(bounds,{color:"#38bdf8",weight:4,opacity:.9}).addTo(R.map);
+      }else{   // 単独時: 使用率で色分け
+        let cur=[],curB=-1;
+        const flush=()=>{if(cur.length>1)L.polyline(cur,{color:BCOL[curB],weight:4,opacity:.9}).addTo(R.map);};
+        for(const p of gps){
+          const u=usageAt(p[0]),b=u<0.6?0:u<0.85?1:2;
+          if(b!==curB&&cur.length){flush();cur=[cur[cur.length-1]];}
+          curB=b;cur.push([p[1],p[2]]);
+        }
+        flush();
       }
-      flush();
       if(R.b.data&&R.b.data.gps&&R.b.data.gps.length>1){
         const bg=R.b.data.gps.map(p=>[p[1],p[2]]);
         L.polyline(bg,{color:"#fb923c",weight:3,opacity:0.7,dashArray:"6 6"}).addTo(R.map);
@@ -1021,7 +1049,7 @@ function buildMap(){
       }
       R.map.fitBounds(bounds,{padding:[12,12]});
       R.marker=L.circleMarker(bounds[0],{radius:7,color:"#fff",weight:2,
-        fillColor:"#f43f5e",fillOpacity:1}).addTo(R.map);
+        fillColor:"#38bdf8",fillOpacity:1}).addTo(R.map);
       setTimeout(()=>R.map&&R.map.invalidateSize(),100);
       return;
     }catch(e){if(R.map){try{R.map.remove();}catch(_){}}R.map=null;}
@@ -1045,11 +1073,18 @@ function drawMapCanvas(tms){
   const X=(lat,lon)=>pad+(lon-lo0)*k*sc+(bw-2*pad-sw*sc)/2;
   const Y=(lat,lon)=>bh-pad-(lat-la0)*sc-(bh-2*pad-sh*sc)/2;
   c.lineWidth=3*d;c.lineCap="round";
-  for(let i=1;i<gps.length;i++){
-    const u=usageAt(gps[i][0]);
-    c.strokeStyle=BCOL[u<0.6?0:u<0.85?1:2];
-    c.beginPath();c.moveTo(X(gps[i-1][1],gps[i-1][2]),Y(gps[i-1][1],gps[i-1][2]));
-    c.lineTo(X(gps[i][1],gps[i][2]),Y(gps[i][1],gps[i][2]));c.stroke();
+  if(bg.length>1){ // 比較時: Aは摩擦円と同じ青の実線
+    c.strokeStyle="#38bdf8";
+    c.beginPath();c.moveTo(X(gps[0][1],gps[0][2]),Y(gps[0][1],gps[0][2]));
+    for(let i=1;i<gps.length;i++)c.lineTo(X(gps[i][1],gps[i][2]),Y(gps[i][1],gps[i][2]));
+    c.stroke();
+  }else{ // 単独時: 使用率で色分け
+    for(let i=1;i<gps.length;i++){
+      const u=usageAt(gps[i][0]);
+      c.strokeStyle=BCOL[u<0.6?0:u<0.85?1:2];
+      c.beginPath();c.moveTo(X(gps[i-1][1],gps[i-1][2]),Y(gps[i-1][1],gps[i-1][2]));
+      c.lineTo(X(gps[i][1],gps[i][2]),Y(gps[i][1],gps[i][2]));c.stroke();
+    }
   }
   if(bg.length>1){
     c.setLineDash([5*d,5*d]);c.strokeStyle="#fb923c";c.lineWidth=2*d;
@@ -1062,7 +1097,7 @@ function drawMapCanvas(tms){
     if(pb){c.fillStyle="#fb923c";c.strokeStyle="#fff";c.lineWidth=2*d;
       c.beginPath();c.arc(X(pb.lat,pb.lon),Y(pb.lat,pb.lon),5*d,0,7);c.fill();c.stroke();}}
   if(tms!=null){const p=posAt(tms);if(p){
-    c.fillStyle="#f43f5e";c.strokeStyle="#fff";c.lineWidth=2*d;
+    c.fillStyle="#38bdf8";c.strokeStyle="#fff";c.lineWidth=2*d;
     c.beginPath();c.arc(X(p.lat,p.lon),Y(p.lat,p.lon),6*d,0,7);c.fill();c.stroke();}}
   c.fillStyle="#8a98a8";c.font=(10*d)+"px sans-serif";
   c.fillText("GPS走行ライン(簡易表示)",8*d,14*d);
@@ -1073,14 +1108,27 @@ function renderAt(tms){
   const trail=[];let j=i;
   while(j>=0&&tms-S[j][0]<=3000){trail.push([S[j][1],S[j][2],S[j][0]]);j--;}
   trail.reverse();
-  ggRep.trail=trail;ggRep.cur=[S[i][1],S[i][2]];
+  const cg=[S[i][1],S[i][2]];
+  $("rMLat").textContent=(cg[0]>=0?"+":"")+cg[0].toFixed(2);
+  $("rMLon").textContent=(cg[1]>=0?"+":"")+cg[1].toFixed(2);
+  $("rMUse").textContent=Math.round(Math.hypot(cg[0],cg[1])/set.carMaxG*100);
+  ggRep.trail=trail;ggRep.cur=cg;
   if(R.b.data){
     const SB=R.b.data.S||R.b.data.samples,durB=SB[SB.length-1][0],tB=tms-R.b.off*1000;
     if(tB>=0&&tB<=durB){
       const ib=idxAt(SB,tB),trB=[];let k=ib;
       while(k>=0&&tB-SB[k][0]<=3000){trB.push([SB[k][1],SB[k][2],SB[k][0]]);k--;}
       trB.reverse();ggRep.trailB=trB;ggRep.curB=[SB[ib][1],SB[ib][2]];
-    }else{ggRep.trailB=[];ggRep.curB=null;}
+      const bg2=ggRep.curB;
+      $("rMLatB").textContent=(bg2[0]>=0?"+":"")+bg2[0].toFixed(2);
+      $("rMLonB").textContent=(bg2[1]>=0?"+":"")+bg2[1].toFixed(2);
+      $("rMUseB").textContent=Math.round(Math.hypot(bg2[0],bg2[1])/R.b.maxG*100);
+      const pb2=R.b.data.gps&&posOf(R.b.data.gps,tB);
+      $("rMSpdB").textContent=(pb2&&pb2.spd!=null)?Math.round(pb2.spd):"--";
+    }else{
+      ggRep.trailB=[];ggRep.curB=null;
+      ["rMSpdB","rMUseB","rMLonB","rMLatB"].forEach(id=>$(id).textContent="--");
+    }
     if(R.marker2&&R.b.data.gps){
       const pb=posOf(R.b.data.gps,Math.max(0,Math.min(durB,tB)));
       if(pb)R.marker2.setLatLng([pb.lat,pb.lon]);}
@@ -1088,6 +1136,7 @@ function renderAt(tms){
   ggRep.redraw();
   drawStrip(tms);
   const p=posAt(tms);
+  $("rMSpd").textContent=(p&&p.spd!=null)?Math.round(p.spd):"--";
   if(R.marker&&p)R.marker.setLatLng([p.lat,p.lon]);
   if(R.mapCanvas)drawMapCanvas(tms);
   const s=tms/1000;
