@@ -50,8 +50,10 @@
   .meters .u{font-size:9px;color:var(--ink3)}
   .meters .use .v{color:var(--accent2);font-size:24px}
   .meters .vb{display:none;font-size:14px;font-weight:700;color:#fb923c;font-variant-numeric:tabular-nums}
+  .meters .vc{display:none;font-size:14px;font-weight:700;color:#34d399;font-variant-numeric:tabular-nums}
   #rpMeters.cmp .vb{display:block}
-  #rpMeters.cmp .v{color:var(--accent)} /* 比較時: A=青 / B=橙 */
+  #rpMeters.cmpC .vc{display:block}
+  #rpMeters.cmp .v,#rpMeters.cmpC .v{color:var(--accent)} /* 比較時: A=青/B=橙/C=緑 */
   #ggWrap{display:flex;justify-content:center;align-items:center;margin:2px 0 6px}
   canvas.gg{border-radius:12px;background:#10151d;touch-action:none}
   #calWarn{font-size:10px;color:var(--accent2);text-align:left;line-height:1.5;flex:1}
@@ -59,6 +61,8 @@
   #recSide{display:contents}
   .smoothRow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink2);margin:2px 2px 4px}
   .smoothRow input{flex:1;accent-color:var(--accent)}
+  .mgBtn{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+      border-radius:8px;width:34px;padding:5px 0;font-size:15px;font-weight:700;cursor:pointer}
   @media (orientation:portrait){
     #vRec.on{display:flex;flex-direction:column}
     .recBar{order:1}#camWrap{order:2}.meters{order:3}#smoothRow{order:4}
@@ -152,6 +156,11 @@
       <span>なめらかさ</span>
       <input type="range" id="recSmooth" min="0" max="100" step="5">
       <span id="recSmoothV" style="min-width:2em;text-align:right">30</span>
+      <span style="width:8px"></span>
+      <span>最大G</span>
+      <button class="mgBtn" id="mgMinus">−</button>
+      <span id="mgV" style="min-width:2.8em;text-align:center;font-weight:700;color:var(--max)">1.05</span>
+      <button class="mgBtn" id="mgPlus">＋</button>
     </div>
     <button class="btn warn" id="btnRec">● 記録開始</button>
     <div class="card" id="saveCard">
@@ -180,7 +189,10 @@
       </div>
       <div class="fileRow" style="margin-top:8px">
         <button class="btn" id="btnLoadJsonB">比較データBを開く</button>
-        <button class="btn" id="btnClearB" style="display:none">比較を解除</button>
+        <button class="btn" id="btnLoadJsonC">比較データCを開く</button>
+      </div>
+      <div class="fileRow" style="margin-top:8px">
+        <button class="btn" id="btnClearB" style="display:none">比較を解除(B/C)</button>
       </div>
       <div class="fileRow" style="margin-top:8px">
         <button class="btn" id="btnDemoRep">デモデータで試す(走行不要)</button>
@@ -188,6 +200,7 @@
       </div>
       <div class="note" id="rpInfo">まだデータが読み込まれていません。</div>
       <div class="note" id="rpInfoB" style="display:none;color:#fb923c"></div>
+      <div class="note" id="rpInfoC" style="display:none;color:#34d399"></div>
       <div id="savedHead" style="margin-top:10px;font-size:12px;color:var(--accent);font-weight:700">保存済みの記録(ブラウザ内)</div>
       <div id="savedList"></div>
       <div id="pasteBox">
@@ -205,10 +218,10 @@
         <div id="rpMap"><canvas id="rpMapCv"></canvas></div>
       </div>
       <div class="meters" id="rpMeters" style="margin-top:8px">
-        <div><div class="l">速度</div><div class="v" id="rMSpd">--</div><div class="vb" id="rMSpdB">--</div><div class="u">km/h</div></div>
-        <div class="use"><div class="l">摩擦円使用率</div><div class="v" id="rMUse">0</div><div class="vb" id="rMUseB">--</div><div class="u">%</div></div>
-        <div><div class="l">前後G</div><div class="v" id="rMLon">0.00</div><div class="vb" id="rMLonB">--</div><div class="u">+加速/-減速</div></div>
-        <div><div class="l">横G</div><div class="v" id="rMLat">0.00</div><div class="vb" id="rMLatB">--</div><div class="u">+右/-左</div></div>
+        <div><div class="l">速度</div><div class="v" id="rMSpd">--</div><div class="vb" id="rMSpdB">--</div><div class="vc" id="rMSpdC">--</div><div class="u">km/h</div></div>
+        <div class="use"><div class="l">摩擦円使用率</div><div class="v" id="rMUse">0</div><div class="vb" id="rMUseB">--</div><div class="vc" id="rMUseC">--</div><div class="u">%</div></div>
+        <div><div class="l">前後G</div><div class="v" id="rMLon">0.00</div><div class="vb" id="rMLonB">--</div><div class="vc" id="rMLonC">--</div><div class="u">+加速/-減速</div></div>
+        <div><div class="l">横G</div><div class="v" id="rMLat">0.00</div><div class="vb" id="rMLatB">--</div><div class="vc" id="rMLatC">--</div><div class="u">+右/-左</div></div>
       </div>
       <div id="stripBox"><canvas id="strip"></canvas></div>
       <div class="ctrlRow">
@@ -220,9 +233,16 @@
         <label id="bOffLab" style="display:none;color:#fb923c">B開始補正
           <input type="range" id="rpOfsB" min="-15" max="15" step="0.1" value="0" style="width:110px">
           <span id="rpOfsBV">0.0</span>s</label>
+        <label id="cOffLab" style="display:none;color:#34d399">C開始補正
+          <input type="range" id="rpOfsC" min="-15" max="15" step="0.1" value="0" style="width:110px">
+          <span id="rpOfsCV">0.0</span>s</label>
         <label>なめらかさ
           <input type="range" id="rpSmooth" min="0" max="100" step="5" value="30" style="width:90px">
           <span id="rpSmoothV">30</span></label>
+        <label>最大G
+          <button class="mgBtn" id="mgMinusR" style="width:28px;padding:3px 0">−</button>
+          <span id="mgVR" style="color:var(--max);font-weight:700">1.05</span>
+          <button class="mgBtn" id="mgPlusR" style="width:28px;padding:3px 0">＋</button></label>
       </div>
       <div class="statsRow">
         <div class="stat"><div class="l">最大G</div><div class="v" id="stMax">-</div></div>
@@ -230,10 +250,11 @@
         <div class="stat"><div class="l">90%超の時間</div><div class="v" id="stHi">-</div></div>
       </div>
       <div class="note">地図の走行ラインの色(単独時): <span class="ok">■緑=使用率60%未満</span> / <span style="color:var(--accent2)">■黄=60〜85%</span> / <span class="bad">■赤=85%以上</span>。グラフをタップするとその瞬間にジャンプします。<br>
-      比較時は摩擦円・地図・グラフすべて <span style="color:var(--accent)">■青=基準データA</span> / <span style="color:#fb923c">■橙=比較データB</span> に統一されます。スタートのズレは「B開始補正」で合わせます(+でBを遅らせる)。</div>
+      比較時は摩擦円・地図・グラフすべて <span style="color:var(--accent)">■青=基準A</span> / <span style="color:#fb923c">■橙=比較B</span> / <span style="color:#34d399">■緑=比較C</span> に統一されます。スタートのズレは「B/C開始補正」で合わせます(+で遅らせる)。</div>
     </div>
     <input type="file" id="fJson" accept=".json,application/json">
     <input type="file" id="fJsonB" accept=".json,application/json">
+    <input type="file" id="fJsonC" accept=".json,application/json">
     <input type="file" id="fVideo" accept="video/*">
   </section>
 
@@ -293,6 +314,8 @@ function refreshSetUI(){
   $("setFlip").checked=set.flip; $("setFlipLon").checked=set.flipLon;
   $("setRate").value=set.rate; $("setDemo").checked=set.demo;
   $("recSmooth").value=set.smooth; $("recSmoothV").textContent=set.smooth;
+  $("mgV").textContent=set.carMaxG.toFixed(2);
+  const mv=$("mgVR");if(mv)mv.textContent=set.carMaxG.toFixed(2);
   $("hCar").textContent=set.carName+" / 最大"+set.carMaxG.toFixed(2)+"G";
   updateCamTgl();
   updateStat();
@@ -314,6 +337,28 @@ $("setFlip").addEventListener("change",e=>{set.flip=e.target.checked;saveSet();}
 $("setFlipLon").addEventListener("change",e=>{set.flipLon=e.target.checked;saveSet();});
 $("recSmooth").addEventListener("input",e=>{
   set.smooth=+e.target.value;$("recSmoothV").textContent=set.smooth;saveSet();});
+/* 最大G(赤円)の±0.1調整: 記録中・再生中いつでも可 */
+function rebuildRecHist(){
+  ggRec.clearHist();rec.prevS=null;
+  if(!rec.samples.length)return;
+  const S=smoothArr(rec.samples,set.rate,set.smooth);
+  const step=Math.max(1,Math.ceil(S.length/4000));
+  for(let i=step;i<S.length;i+=step)
+    ggRec.histSeg([S[i-step][1],S[i-step][2]],[S[i][1],S[i][2]]);
+}
+function bumpMax(d){
+  set.carMaxG=Math.min(3,Math.max(0.3,Math.round((set.carMaxG+d)*100)/100));
+  saveSet();refreshSetUI();rebuildRecHist();
+  if(R.data){
+    if(R.b.data)R.b.maxG=set.carMaxG;
+    if(R.c.data)R.c.maxG=set.carMaxG;
+    applySmooth();buildMap();
+  }
+}
+$("mgMinus").addEventListener("click",()=>bumpMax(-0.1));
+$("mgPlus").addEventListener("click",()=>bumpMax(0.1));
+$("mgMinusR").addEventListener("click",()=>bumpMax(-0.1));
+$("mgPlusR").addEventListener("click",()=>bumpMax(0.1));
 function toggleCam(on){
   if(rec.on){alert("記録中はカメラ設定を変更できません。");return false;}
   set.useCam=on;saveSet();
@@ -347,7 +392,7 @@ function createGG(canvas){
   const ctx=canvas.getContext("2d");
   const hist=document.createElement("canvas"),hctx=hist.getContext("2d");
   let px=280,d=1;
-  const o={trail:[],cur:null,trailB:[],curB:null};
+  const o={trail:[],cur:null,trailB:[],curB:null,trailC:[],curC:null};
   o.setSize=s=>{d=window.devicePixelRatio||1;px=s;
     canvas.width=s*d;canvas.height=s*d;canvas.style.width=s+"px";canvas.style.height=s+"px";
     const old=document.createElement("canvas");old.width=hist.width;old.height=hist.height;
@@ -390,12 +435,14 @@ function createGG(canvas){
         ctx.lineWidth=3*d;ctx.lineCap="round";
         ctx.beginPath();ctx.moveTo(a,b);ctx.lineTo(c,e);ctx.stroke();
       }};
+    drawTrail(o.trailC,"52,211,153");
     drawTrail(o.trailB,"251,146,60");
     drawTrail(o.trail,"56,189,248");
     // current dots
     const dot=(p,fill,r)=>{const[a,b]=XY(p[0],p[1]);
       ctx.fillStyle=fill;ctx.strokeStyle="#0e1116";ctx.lineWidth=2*d;
       ctx.beginPath();ctx.arc(a,b,r*d,0,7);ctx.fill();ctx.stroke();};
+    if(o.curC)dot(o.curC,"#34d399",6); // C=緑(軌跡と同色)
     if(o.curB)dot(o.curB,"#fb923c",6); // B=橙(軌跡と同色)
     if(o.cur)dot(o.cur,"#38bdf8",7);   // A=青(軌跡と同色)
   };
@@ -453,7 +500,7 @@ function vehicleG(f){ // 正規化済みセンサー値 -> [横G, 前後G]
   const hx=f.x-f0.x,hy=f.y-f0.y,hz=f.z-f0.z;
   const dp=hx*uV.x+hy*uV.y+hz*uV.z;
   const px=hx-dp*uV.x,py=hy-dp*uV.y,pz=hz-dp*uV.z;
-  let lon=(px*fwd3.x+py*fwd3.y+pz*fwd3.z)/G0;
+  let lon=-(px*fwd3.x+py*fwd3.y+pz*fwd3.z)/G0; // 既定で反転: 加速時に上(＋)へ
   let lat=(px*rgt3.x+py*rgt3.y+pz*rgt3.z)/G0;
   if(set.flip)lat=-lat;
   if(set.flipLon)lon=-lon;
@@ -790,6 +837,7 @@ async function renderSavedList(){
       loadData(JSON.parse(JSON.stringify(it.json)));
     });
     mk("Bとして",()=>loadDataB(JSON.parse(JSON.stringify(it.json))));
+    mk("Cとして",()=>loadDataC(JSON.parse(JSON.stringify(it.json))));
     mk("書き出し",()=>dl(new Blob([JSON.stringify(it.json)],{type:"application/json"}),
       "fc_"+(it.name?it.name.replace(/\s+/g,"_")+"_":"")+(it.date||"").slice(0,10)+".json"));
     mk("削除",async()=>{
@@ -847,8 +895,8 @@ function recLoop(){
 
 /* ================= 再生 ================= */
 const R={data:null,playing:false,clock:0,speed:1,offset:0,dur:0,sm:30,lastT:0,
-  stripCv:null,map:null,marker:null,marker2:null,mapCanvas:false,lastRAF:0,
-  b:{data:null,maxG:1,off:0}};
+  stripCv:null,map:null,marker:null,marker2:null,marker3:null,mapCanvas:false,lastRAF:0,
+  b:{data:null,maxG:1,off:0},c:{data:null,maxG:1,off:0}};
 const ggRep=createGG($("ggRep"));
 const rpV=$("rpVideo");
 const BCOL=["#34d399","#fbbf24","#f43f5e"];
@@ -879,6 +927,14 @@ $("rpOfsB").addEventListener("input",e=>{
   R.b.off=parseFloat(e.target.value);
   $("rpOfsBV").textContent=R.b.off.toFixed(1);
   buildStrip();});
+$("btnLoadJsonC").addEventListener("click",()=>$("fJsonC").click());
+$("fJsonC").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
+  f.text().then(t=>{try{loadDataC(JSON.parse(t));}catch(err){alert("読み込めませんでした: "+err);}});
+  e.target.value="";});
+$("rpOfsC").addEventListener("input",e=>{
+  R.c.off=parseFloat(e.target.value);
+  $("rpOfsCV").textContent=R.c.off.toFixed(1);
+  buildStrip();});
 
 function loadDataB(j){
   if(!R.data){alert("先に基準データA(.json)を読み込んでください");return;}
@@ -895,11 +951,29 @@ function loadDataB(j){
     "─ "+(j.samples[j.samples.length-1][0]/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G";
   applySmooth();buildMap();
 }
+function loadDataC(j){
+  if(!R.data){alert("先に基準データA(.json)を読み込んでください");return;}
+  if(!j||!Array.isArray(j.samples)||!j.samples.length){alert("データ形式が違います");return;}
+  R.c.data=j;R.c.maxG=(j.car&&j.car.maxG)||set.carMaxG;R.c.off=0;
+  $("rpOfsC").value=0;$("rpOfsCV").textContent="0.0";
+  $("cOffLab").style.display="inline";$("btnClearB").style.display="block";
+  $("rpMeters").classList.add("cmpC");
+  let mx=0;for(const s of j.samples)mx=Math.max(mx,Math.hypot(s[1],s[2]));
+  $("rpInfoC").style.display="block";
+  $("rpInfoC").textContent="比較C: "+(j.name?j.name+" / ":"")+
+    ((j.car&&j.car.name)?j.car.name+" / ":"")+
+    (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
+    "─ "+(j.samples[j.samples.length-1][0]/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G";
+  applySmooth();buildMap();
+}
 function clearB(){
   R.b.data=null;R.marker2=null;
-  $("bOffLab").style.display="none";$("btnClearB").style.display="none";
-  $("rpInfoB").style.display="none";ggRep.trailB=[];ggRep.curB=null;
-  $("rpMeters").classList.remove("cmp");
+  R.c.data=null;R.marker3=null;
+  $("bOffLab").style.display="none";$("cOffLab").style.display="none";
+  $("btnClearB").style.display="none";
+  $("rpInfoB").style.display="none";$("rpInfoC").style.display="none";
+  ggRep.trailB=[];ggRep.curB=null;ggRep.trailC=[];ggRep.curC=null;
+  $("rpMeters").classList.remove("cmp");$("rpMeters").classList.remove("cmpC");
   buildHist();buildStrip();buildMap();
 }
 
@@ -946,6 +1020,7 @@ function applySmooth(){
   if(!R.data)return;
   R.data.S=smoothArr(R.data.samples,R.data.rate,R.sm);
   if(R.b.data)R.b.data.S=smoothArr(R.b.data.samples,R.b.data.rate,R.sm);
+  if(R.c.data)R.c.data.S=smoothArr(R.c.data.samples,R.c.data.rate,R.sm);
   buildHist();buildStrip();updStats();renderAt(R.lastT||0);
 }
 $("rpSmooth").addEventListener("input",e=>{
@@ -972,6 +1047,11 @@ function buildHist(){
     for(let i=st;i<B.length;i+=st)
       ggRep.histSeg([B[i-st][1],B[i-st][2]],[B[i][1],B[i][2]],"rgba(251,146,60,0.26)");
   }
+  if(R.c.data){
+    const C=R.c.data.S||R.c.data.samples,st=Math.max(1,Math.ceil(C.length/4000));
+    for(let i=st;i<C.length;i+=st)
+      ggRep.histSeg([C[i-st][1],C[i-st][2]],[C[i][1],C[i][2]],"rgba(52,211,153,0.26)");
+  }
 }
 function buildStrip(){
   if(!R.data)return;
@@ -989,17 +1069,20 @@ function buildStrip(){
   c.strokeStyle="#38bdf8";c.lineWidth=1.5*d;c.beginPath();
   for(let x=0;x<W;x+=2){const y=yOf(usageAt(x/W*R.dur));x?c.lineTo(x,y):c.moveTo(x,y);}
   c.stroke();
-  if(R.b.data){
-    const SB=R.b.data.S||R.b.data.samples,durB=SB[SB.length-1][0];
-    c.strokeStyle="#fb923c";c.lineWidth=1.5*d;c.beginPath();let pen=false;
+  const cmpLine=(slot,col)=>{
+    if(!slot.data)return;
+    const S2=slot.data.S||slot.data.samples,dur2=S2[S2.length-1][0];
+    c.strokeStyle=col;c.lineWidth=1.5*d;c.beginPath();let pen=false;
     for(let x=0;x<W;x+=2){
-      const tB=x/W*R.dur-R.b.off*1000;
-      if(tB<0||tB>durB){pen=false;continue;}
-      const y=yOf(usageOf(R.b.data,R.b.maxG,tB));
+      const t2=x/W*R.dur-slot.off*1000;
+      if(t2<0||t2>dur2){pen=false;continue;}
+      const y=yOf(usageOf(slot.data,slot.maxG,t2));
       pen?c.lineTo(x,y):c.moveTo(x,y);pen=true;
     }
     c.stroke();
-  }
+  };
+  cmpLine(R.b,"#fb923c");
+  cmpLine(R.c,"#34d399");
   c.strokeStyle="#f43f5e";c.setLineDash([4*d,4*d]);c.lineWidth=1*d;
   c.beginPath();c.moveTo(0,yOf(1));c.lineTo(W,yOf(1));c.stroke();c.setLineDash([]);
   c.fillStyle="#8a98a8";c.font=(9*d)+"px sans-serif";
@@ -1016,7 +1099,7 @@ function drawStrip(t){
 }
 function buildMap(){
   const gps=R.data.gps||[];
-  if(R.map){R.map.remove();R.map=null;R.marker=null;R.marker2=null;}
+  if(R.map){R.map.remove();R.map=null;R.marker=null;R.marker2=null;R.marker3=null;}
   R.mapCanvas=false;
   const cv=$("rpMapCv");
   if(gps.length<2){cv.style.display="none";return;}
@@ -1026,7 +1109,8 @@ function buildMap(){
       R.map=L.map($("rpMap"),{zoomControl:false});
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         {maxZoom:19,attribution:"© OpenStreetMap"}).addTo(R.map);
-      const cmp=!!(R.b.data&&R.b.data.gps&&R.b.data.gps.length>1);
+      const cmp=!!((R.b.data&&R.b.data.gps&&R.b.data.gps.length>1)||
+                   (R.c.data&&R.c.data.gps&&R.c.data.gps.length>1));
       const bounds=gps.map(p=>[p[1],p[2]]);
       if(cmp){ // 比較時: Aは摩擦円と同じ青の実線
         L.polyline(bounds,{color:"#38bdf8",weight:4,opacity:.9}).addTo(R.map);
@@ -1047,6 +1131,13 @@ function buildMap(){
         R.marker2=L.circleMarker(bg[0],{radius:6,color:"#fff",weight:2,
           fillColor:"#fb923c",fillOpacity:1}).addTo(R.map);
       }
+      if(R.c.data&&R.c.data.gps&&R.c.data.gps.length>1){
+        const cg=R.c.data.gps.map(p=>[p[1],p[2]]);
+        L.polyline(cg,{color:"#34d399",weight:3,opacity:0.7,dashArray:"2 7"}).addTo(R.map);
+        bounds.push(...cg);
+        R.marker3=L.circleMarker(cg[0],{radius:6,color:"#fff",weight:2,
+          fillColor:"#34d399",fillOpacity:1}).addTo(R.map);
+      }
       R.map.fitBounds(bounds,{padding:[12,12]});
       R.marker=L.circleMarker(bounds[0],{radius:7,color:"#fff",weight:2,
         fillColor:"#38bdf8",fillOpacity:1}).addTo(R.map);
@@ -1064,8 +1155,9 @@ function drawMapCanvas(tms){
   const gps=R.data.gps,c=cv.getContext("2d");
   c.fillStyle="#1d242f";c.fillRect(0,0,bw,bh);
   const bg=(R.b.data&&R.b.data.gps)||[];
+  const cg2=(R.c.data&&R.c.data.gps)||[];
   let la0=1e9,la1=-1e9,lo0=1e9,lo1=-1e9;
-  for(const p of gps.concat(bg)){la0=Math.min(la0,p[1]);la1=Math.max(la1,p[1]);
+  for(const p of gps.concat(bg,cg2)){la0=Math.min(la0,p[1]);la1=Math.max(la1,p[1]);
     lo0=Math.min(lo0,p[2]);lo1=Math.max(lo1,p[2]);}
   const k=Math.cos((la0+la1)/2*Math.PI/180);
   const sw=(lo1-lo0)*k||1e-6,sh=(la1-la0)||1e-6,pad=16*d;
@@ -1073,7 +1165,7 @@ function drawMapCanvas(tms){
   const X=(lat,lon)=>pad+(lon-lo0)*k*sc+(bw-2*pad-sw*sc)/2;
   const Y=(lat,lon)=>bh-pad-(lat-la0)*sc-(bh-2*pad-sh*sc)/2;
   c.lineWidth=3*d;c.lineCap="round";
-  if(bg.length>1){ // 比較時: Aは摩擦円と同じ青の実線
+  if(bg.length>1||cg2.length>1){ // 比較時: Aは摩擦円と同じ青の実線
     c.strokeStyle="#38bdf8";
     c.beginPath();c.moveTo(X(gps[0][1],gps[0][2]),Y(gps[0][1],gps[0][2]));
     for(let i=1;i<gps.length;i++)c.lineTo(X(gps[i][1],gps[i][2]),Y(gps[i][1],gps[i][2]));
@@ -1092,10 +1184,20 @@ function drawMapCanvas(tms){
     for(let i=1;i<bg.length;i++)c.lineTo(X(bg[i][1],bg[i][2]),Y(bg[i][1],bg[i][2]));
     c.stroke();c.setLineDash([]);
   }
+  if(cg2.length>1){
+    c.setLineDash([2*d,6*d]);c.strokeStyle="#34d399";c.lineWidth=2*d;
+    c.beginPath();c.moveTo(X(cg2[0][1],cg2[0][2]),Y(cg2[0][1],cg2[0][2]));
+    for(let i=1;i<cg2.length;i++)c.lineTo(X(cg2[i][1],cg2[i][2]),Y(cg2[i][1],cg2[i][2]));
+    c.stroke();c.setLineDash([]);
+  }
   if(tms!=null&&bg.length){
     const tB=tms-R.b.off*1000,pb=posOf(bg,Math.max(0,tB));
     if(pb){c.fillStyle="#fb923c";c.strokeStyle="#fff";c.lineWidth=2*d;
       c.beginPath();c.arc(X(pb.lat,pb.lon),Y(pb.lat,pb.lon),5*d,0,7);c.fill();c.stroke();}}
+  if(tms!=null&&cg2.length){
+    const tC=tms-R.c.off*1000,pc=posOf(cg2,Math.max(0,tC));
+    if(pc){c.fillStyle="#34d399";c.strokeStyle="#fff";c.lineWidth=2*d;
+      c.beginPath();c.arc(X(pc.lat,pc.lon),Y(pc.lat,pc.lon),5*d,0,7);c.fill();c.stroke();}}
   if(tms!=null){const p=posAt(tms);if(p){
     c.fillStyle="#38bdf8";c.strokeStyle="#fff";c.lineWidth=2*d;
     c.beginPath();c.arc(X(p.lat,p.lon),Y(p.lat,p.lon),6*d,0,7);c.fill();c.stroke();}}
@@ -1133,6 +1235,26 @@ function renderAt(tms){
       const pb=posOf(R.b.data.gps,Math.max(0,Math.min(durB,tB)));
       if(pb)R.marker2.setLatLng([pb.lat,pb.lon]);}
   }else{ggRep.trailB=[];ggRep.curB=null;}
+  if(R.c.data){
+    const SC=R.c.data.S||R.c.data.samples,durC=SC[SC.length-1][0],tC=tms-R.c.off*1000;
+    if(tC>=0&&tC<=durC){
+      const ic=idxAt(SC,tC),trC=[];let k2=ic;
+      while(k2>=0&&tC-SC[k2][0]<=3000){trC.push([SC[k2][1],SC[k2][2],SC[k2][0]]);k2--;}
+      trC.reverse();ggRep.trailC=trC;ggRep.curC=[SC[ic][1],SC[ic][2]];
+      const cg3=ggRep.curC;
+      $("rMLatC").textContent=(cg3[0]>=0?"+":"")+cg3[0].toFixed(2);
+      $("rMLonC").textContent=(cg3[1]>=0?"+":"")+cg3[1].toFixed(2);
+      $("rMUseC").textContent=Math.round(Math.hypot(cg3[0],cg3[1])/R.c.maxG*100);
+      const pc2=R.c.data.gps&&posOf(R.c.data.gps,tC);
+      $("rMSpdC").textContent=(pc2&&pc2.spd!=null)?Math.round(pc2.spd):"--";
+    }else{
+      ggRep.trailC=[];ggRep.curC=null;
+      ["rMSpdC","rMUseC","rMLonC","rMLatC"].forEach(id=>$(id).textContent="--");
+    }
+    if(R.marker3&&R.c.data.gps){
+      const pc=posOf(R.c.data.gps,Math.max(0,Math.min(durC,tC)));
+      if(pc)R.marker3.setLatLng([pc.lat,pc.lon]);}
+  }else{ggRep.trailC=[];ggRep.curC=null;}
   ggRep.redraw();
   drawStrip(tms);
   const p=posAt(tms);
