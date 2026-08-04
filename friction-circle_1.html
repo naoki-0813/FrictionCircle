@@ -192,6 +192,7 @@
         <button class="btn" id="btnLoadJsonC">比較データCを開く</button>
       </div>
       <div class="fileRow" style="margin-top:8px">
+        <button class="btn" id="btnCsv">CSVで書き出し(Excel向け)</button>
         <button class="btn" id="btnClearB" style="display:none">比較を解除(B/C)</button>
       </div>
       <div class="fileRow" style="margin-top:8px">
@@ -222,6 +223,9 @@
         <div class="use"><div class="l">摩擦円使用率</div><div class="v" id="rMUse">0</div><div class="vb" id="rMUseB">--</div><div class="vc" id="rMUseC">--</div><div class="u">%</div></div>
         <div><div class="l">前後G</div><div class="v" id="rMLon">0.00</div><div class="vb" id="rMLonB">--</div><div class="vc" id="rMLonC">--</div><div class="u">+加速/-減速</div></div>
         <div><div class="l">横G</div><div class="v" id="rMLat">0.00</div><div class="vb" id="rMLatB">--</div><div class="vc" id="rMLatC">--</div><div class="u">+右/-左</div></div>
+        <div><div class="l">車両の向き</div>
+          <canvas id="carCv" width="112" height="112" style="display:block;margin:1px auto 0;width:56px;height:56px"></canvas>
+          <div class="u" id="slipV">スリップ --</div></div>
       </div>
       <div id="stripBox"><canvas id="strip"></canvas></div>
       <div class="ctrlRow">
@@ -538,13 +542,25 @@ function smoothArr(S,rate,val){ // 再生用: 生サンプル配列を一括平�
   return out;
 }
 let dispF=newFState(),lastFrame=0;
+let latestYaw=null; // ヨーレート(車体の回転速度) deg/s, 右回り+
+let lastRawEv=null; // 端末センサーの生値(変換前)
 window.addEventListener("devicemotion",ev=>{
   motionSeen=true;
   const raw=ev.accelerationIncludingGravity;
-  if(!raw||raw.x==null)return;
-  const f=nf(raw);
-  lastMotion={x:f.x,y:f.y,z:f.z,t:performance.now()};
-  const g=vehicleG(f);if(g)latestG=g;
+  const rr=ev.rotationRate; // beta=X軸, gamma=Y軸, alpha=Z軸まわり(deg/s)
+  lastRawEv={ax:raw&&raw.x!=null?raw.x:null,ay:raw?raw.y:null,az:raw?raw.z:null,
+             ra:rr?rr.alpha:null,rb:rr?rr.beta:null,rg:rr?rr.gamma:null};
+  if(raw&&raw.x!=null){
+    const f=nf(raw);
+    lastMotion={x:f.x,y:f.y,z:f.z,t:performance.now()};
+    const g=vehicleG(f);if(g)latestG=g;
+  }
+  if(rr&&rr.alpha!=null&&uV){
+    let yw=(rr.beta||0)*uV.x+(rr.gamma||0)*uV.y+(rr.alpha||0)*uV.z;
+    yw=-yw; // 右旋回を+に
+    if(set.flip)yw=-yw;
+    latestYaw=yw;
+  }
 });
 
 async function requestPerms(){
@@ -574,7 +590,8 @@ function startGpsWatch(){
              spd:p.coords.speed!=null?p.coords.speed*3.6:null};
     if(rec.on&&!set.demo)rec.gps.push([Math.round(performance.now()-rec.t0),
         +p.coords.latitude.toFixed(6),+p.coords.longitude.toFixed(6),
-        p.coords.speed!=null?+(p.coords.speed*3.6).toFixed(1):null]);
+        p.coords.speed!=null?+(p.coords.speed*3.6).toFixed(1):null,
+        p.coords.heading!=null?Math.round(p.coords.heading):null]);
   },()=>{},{enableHighAccuracy:true,maximumAge:500});
 }
 async function startCamPreview(){
@@ -592,7 +609,7 @@ async function startCamPreview(){
 
 /* ================= デモシミュレータ ================= */
 function demoStepper(ph){
-  let lat=36.5645,lon=139.9005,hdg=0,v=22,t=0;
+  let lat=36.5645,lon=139.9005,hdg=0,v=22,t=0,pv=0;
   const p=ph||0;
   return{
     step(dt){
@@ -608,7 +625,12 @@ function demoStepper(ph){
       hdg+=la*G0/v*dt;
       lat+=v*Math.cos(hdg)*dt/111320;
       lon+=v*Math.sin(hdg)*dt/(111320*Math.cos(lat*Math.PI/180));
-      return{g:[la,lo],lat,lon,spd:v*3.6,t};
+      // 模擬スリップ: 時々テールが流れる(車体の向きだけ進行方向からズレる)
+      const sl=12*Math.pow(Math.sin((t+p)*0.8),9);
+      const dsl=(sl-pv)/dt;pv=sl;
+      const yaw=la*G0/v*180/Math.PI+dsl;
+      const course=((hdg*180/Math.PI)%360+360)%360;
+      return{g:[la,lo],lat,lon,spd:v*3.6,t,yaw,course};
     }
   };
 }
@@ -616,8 +638,9 @@ function genDemoJson(sec,ph){
   const st=demoStepper(ph),rate=25,samples=[],gps=[];
   for(let i=0;i<sec*rate;i++){
     const s=st.step(1/rate);
-    samples.push([Math.round(s.t*1000),+s.g[0].toFixed(3),+s.g[1].toFixed(3)]);
-    if(i%rate===0)gps.push([Math.round(s.t*1000),+s.lat.toFixed(6),+s.lon.toFixed(6),+s.spd.toFixed(1)]);
+    samples.push([Math.round(s.t*1000),+s.g[0].toFixed(3),+s.g[1].toFixed(3),+s.yaw.toFixed(1)]);
+    if(i%rate===0)gps.push([Math.round(s.t*1000),+s.lat.toFixed(6),+s.lon.toFixed(6),
+      +s.spd.toFixed(1),Math.round(s.course)]);
   }
   return{app:"friction-circle-recorder",version:1,date:new Date().toISOString(),
     car:{name:set.carName,maxG:set.carMaxG},rate,samples,gps};
@@ -654,7 +677,7 @@ async function startRec(){
   rec.videoBlob=null;rec.jsonObj=null;
   rec.t0=performance.now();
   rec.demo=set.demo?demoStepper():null;
-  rec.f=newFState();rec.prevS=null;
+  rec.f=newFState();rec.prevS=null;rec.raw=[];
   ggRec.clearHist();ggRec.trail=[];
   $("btnRec").textContent="■ 記録停止";$("saveCard").style.display="none";
   $("recBadge").style.display="none";updateCamTgl();sizeRecGG();
@@ -680,16 +703,23 @@ async function startRec(){
   const dt=1/set.rate;
   rec.timer=setInterval(()=>{
     const t=performance.now()-rec.t0;
-    let g=latestG;
+    let g=latestG,yw=latestYaw;
     if(rec.demo){
-      const s=rec.demo.step(dt);g=s.g;
+      const s=rec.demo.step(dt);g=s.g;yw=s.yaw;
       lastGps={t:performance.now(),lat:s.lat,lon:s.lon,spd:s.spd};
       if(Math.floor(s.t)>Math.floor(s.t-dt))
-        rec.gps.push([Math.round(t),+s.lat.toFixed(6),+s.lon.toFixed(6),+s.spd.toFixed(1)]);
+        rec.gps.push([Math.round(t),+s.lat.toFixed(6),+s.lon.toFixed(6),
+          +s.spd.toFixed(1),Math.round(s.course)]);
     }
     if(!g)return;
     const p=[+g[0].toFixed(3),+g[1].toFixed(3)];
-    rec.samples.push([Math.round(t),p[0],p[1]]); // 保存は生データのまま
+    rec.samples.push([Math.round(t),p[0],p[1],yw!=null?+yw.toFixed(1):0]); // 変換済み(フィルタ前)
+    if(!rec.demo&&lastRawEv&&lastRawEv.ax!=null) // 端末センサーの生値(変換前)
+      rec.raw.push([Math.round(t),
+        +lastRawEv.ax.toFixed(3),+lastRawEv.ay.toFixed(3),+lastRawEv.az.toFixed(3),
+        lastRawEv.rb!=null?+lastRawEv.rb.toFixed(1):null,
+        lastRawEv.rg!=null?+lastRawEv.rg.toFixed(1):null,
+        lastRawEv.ra!=null?+lastRawEv.ra.toFixed(1):null]);
     const s=stepF(rec.f,p[0],p[1],dt,tauOf(set.smooth)); // 表示・履歴は平滑化
     if(rec.prevS)ggRec.histSeg(rec.prevS,[s[0],s[1]]);
     rec.prevS=[s[0],s[1]];
@@ -705,6 +735,11 @@ function stopRec(){
       car:{name:set.carName,maxG:set.carMaxG},rate:set.rate,samples:rec.samples,gps:rec.gps};
     if(rec.videoLag!=null)rec.jsonObj.videoLag=+rec.videoLag.toFixed(2);
     rec.jsonObj.smooth=set.smooth;
+    rec.jsonObj.calib={f0:set.calib?set.calib.f0:null,axSign:AXSIGN,
+      flip:set.flip,flipLon:set.flipLon};
+    if(rec.raw.length)rec.jsonObj.raw={
+      format:"[t_ms, accX, accY, accZ (m/s2, 重力込み・端末座標系), rotX, rotY, rotZ (deg/s)]",
+      samples:rec.raw};
     $("saveCard").style.display="block";sizeRecGG();
     autoSaveRec();
     $("btnDlVideo").disabled=!rec.videoBlob;
@@ -923,6 +958,22 @@ $("fJsonB").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return
   e.target.value="";});
 $("btnDemoRepB").addEventListener("click",()=>loadDataB(genDemoJson(100,7)));
 $("btnClearB").addEventListener("click",clearB);
+$("btnCsv").addEventListener("click",()=>{
+  if(!R.data){alert("先にデータ(.json)を読み込んでください");return;}
+  const S=R.data.samples,rawS=(R.data.raw&&R.data.raw.samples)||null;
+  const rows=["t_s,横G,前後G,ヨーレートdps,速度kmh,緯度,経度"+
+    (rawS?",生accX,生accY,生accZ,生rotX,生rotY,生rotZ":"")];
+  for(let i=0;i<S.length;i++){
+    const s=S[i],p=posOf(R.data.gps,s[0])||{};
+    let line=(s[0]/1000).toFixed(2)+","+s[1]+","+s[2]+","+(s[3]!=null?s[3]:"")+","+
+      (p.spd!=null?p.spd.toFixed(1):"")+","+
+      (p.lat!=null?p.lat.toFixed(6):"")+","+(p.lon!=null?p.lon.toFixed(6):"");
+    if(rawS){const r=rawS[i]&&rawS[i][0]===s[0]?rawS[i]:rawS[idxAt(rawS,s[0])];
+      line+=r?","+r.slice(1).map(v=>v!=null?v:"").join(","):",,,,,,";}
+    rows.push(line);
+  }
+  dl(new Blob(["﻿"+rows.join("\n")],{type:"text/csv"}),"fc_"+stamp()+".csv");
+});
 $("rpOfsB").addEventListener("input",e=>{
   R.b.off=parseFloat(e.target.value);
   $("rpOfsBV").textContent=R.b.off.toFixed(1);
@@ -989,11 +1040,66 @@ function posOf(g,t){if(!g||!g.length)return null;
     spd:(a[3]!=null&&b[3]!=null)?a[3]+(b[3]-a[3])*f:a[3]};}
 function posAt(t){return posOf(R.data.gps,t);}
 
+/* ---- 車両の向き(ヨー積分+GPS進行方位で補正) → スリップアングル ---- */
+function wrapA(a){while(a>180)a-=360;while(a<-180)a+=360;return a;}
+function buildSlip(data){
+  const S=data.samples;
+  if(!S.length||S[0].length<4){data.SLIP=null;return;}
+  const g=data.gps||[];
+  const courseAt=t=>{
+    if(!g.length)return null;
+    const i=idxAt(g,t),a=g[i],b=g[Math.min(i+1,g.length-1)];
+    if(a.length<5||a[4]==null)return(b.length>4?b[4]:null);
+    if(b.length<5||b[4]==null||b[0]<=a[0])return a[4];
+    const f=(t-a[0])/(b[0]-a[0]);
+    return a[4]+wrapA(b[4]-a[4])*f;
+  };
+  const c0=courseAt(S[0][0]);
+  let hd=(c0!=null?c0:0);
+  const out=new Array(S.length);
+  for(let i=0;i<S.length;i++){
+    const dt=i?(S[i][0]-S[i-1][0])/1000:0;
+    hd+=(S[i][3]||0)*dt;                    // ジャイロで車体向きを積分
+    const co=courseAt(S[i][0]);
+    if(co!=null){
+      // 直進・定常時はGPS方位へ強めに引き寄せてドリフト補正
+      const straight=Math.abs(S[i][1])<0.12&&Math.abs(S[i][3]||0)<4;
+      hd+=wrapA(co-hd)*(straight?0.05:0.004);
+      out[i]=[S[i][0],wrapA(hd-co),hd];
+    }else out[i]=[S[i][0],0,hd];
+  }
+  data.SLIP=out;
+}
+function slipAt(t){
+  const S=R.data&&R.data.SLIP;if(!S)return null;
+  const i=idxAt(S,t);return{slip:S[i][1],hd:S[i][2]};
+}
+function drawCar(slip){
+  const cv=$("carCv");if(!cv)return;
+  const c=cv.getContext("2d"),W=cv.width;
+  c.clearRect(0,0,W,W);
+  c.save();c.translate(W/2,W/2);c.scale(W/56,W/56);
+  c.strokeStyle="#5f6c7d";c.lineWidth=2;   // 進行方向(上向き矢印)
+  c.beginPath();c.moveTo(0,18);c.lineTo(0,-22);
+  c.moveTo(-5,-15);c.lineTo(0,-22);c.lineTo(5,-15);c.stroke();
+  if(slip!=null){
+    c.rotate(slip*Math.PI/180);            // 車体をスリップ角ぶん回転
+    const a=Math.abs(slip);
+    c.fillStyle=a>8?"#f43f5e":a>4?"#fbbf24":"#38bdf8";
+    c.beginPath();
+    c.roundRect?c.roundRect(-8,-16,16,32,6):c.rect(-8,-16,16,32);c.fill();
+    c.fillStyle="#10151d";c.beginPath();
+    c.roundRect?c.roundRect(-5,-7,10,13,3):c.rect(-5,-7,10,13);c.fill();
+  }
+  c.restore();
+}
+
 function loadData(j){
   if(!j||!Array.isArray(j.samples)||!j.samples.length){alert("データ形式が違います");return;}
   R.data=j;R.clock=0;R.playing=false;
   if(j.car&&j.car.maxG){set.carMaxG=j.car.maxG;if(j.car.name)set.carName=j.car.name;refreshSetUI();}
   R.dur=j.samples[j.samples.length-1][0]||1;
+  buildSlip(j);
   $("rpBody").style.display="block";
   $("rpInfo").textContent=(j.name?j.name+" / ":"")+(j.car?j.car.name+" / ":"")+
     (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
@@ -1139,8 +1245,16 @@ function buildMap(){
           fillColor:"#34d399",fillOpacity:1}).addTo(R.map);
       }
       R.map.fitBounds(bounds,{padding:[12,12]});
-      R.marker=L.circleMarker(bounds[0],{radius:7,color:"#fff",weight:2,
-        fillColor:"#38bdf8",fillOpacity:1}).addTo(R.map);
+      if(R.data.SLIP){ // 車体の向きに回転する矢印マーカー
+        R.marker=L.marker(bounds[0],{icon:L.divIcon({className:"",iconSize:[24,24],
+          iconAnchor:[12,12],
+          html:"<div id='carArrowA' style='width:24px;height:24px'>"+
+            "<svg viewBox='0 0 24 24' width='24' height='24'>"+
+            "<path d='M12 2 L19 20 L12 15.5 L5 20 Z' fill='#38bdf8' stroke='#fff' stroke-width='1.5'/></svg></div>"})}).addTo(R.map);
+      }else{
+        R.marker=L.circleMarker(bounds[0],{radius:7,color:"#fff",weight:2,
+          fillColor:"#38bdf8",fillOpacity:1}).addTo(R.map);
+      }
       setTimeout(()=>R.map&&R.map.invalidateSize(),100);
       return;
     }catch(e){if(R.map){try{R.map.remove();}catch(_){}}R.map=null;}
@@ -1199,8 +1313,17 @@ function drawMapCanvas(tms){
     if(pc){c.fillStyle="#34d399";c.strokeStyle="#fff";c.lineWidth=2*d;
       c.beginPath();c.arc(X(pc.lat,pc.lon),Y(pc.lat,pc.lon),5*d,0,7);c.fill();c.stroke();}}
   if(tms!=null){const p=posAt(tms);if(p){
-    c.fillStyle="#38bdf8";c.strokeStyle="#fff";c.lineWidth=2*d;
-    c.beginPath();c.arc(X(p.lat,p.lon),Y(p.lat,p.lon),6*d,0,7);c.fill();c.stroke();}}
+    const spA=slipAt(tms);
+    if(spA){ // 車体の向きに回転する矢印
+      c.save();c.translate(X(p.lat,p.lon),Y(p.lat,p.lon));
+      c.rotate(spA.hd*Math.PI/180);
+      c.fillStyle="#38bdf8";c.strokeStyle="#fff";c.lineWidth=1.5*d;
+      c.beginPath();c.moveTo(0,-9*d);c.lineTo(6*d,8*d);c.lineTo(0,4*d);c.lineTo(-6*d,8*d);
+      c.closePath();c.fill();c.stroke();c.restore();
+    }else{
+      c.fillStyle="#38bdf8";c.strokeStyle="#fff";c.lineWidth=2*d;
+      c.beginPath();c.arc(X(p.lat,p.lon),Y(p.lat,p.lon),6*d,0,7);c.fill();c.stroke();
+    }}}
   c.fillStyle="#8a98a8";c.font=(10*d)+"px sans-serif";
   c.fillText("GPS走行ライン(簡易表示)",8*d,14*d);
 }
@@ -1260,6 +1383,15 @@ function renderAt(tms){
   const p=posAt(tms);
   $("rMSpd").textContent=(p&&p.spd!=null)?Math.round(p.spd):"--";
   if(R.marker&&p)R.marker.setLatLng([p.lat,p.lon]);
+  const sp=slipAt(tms);
+  if(sp){
+    drawCar(sp.slip);
+    const a=Math.abs(sp.slip);
+    $("slipV").textContent="スリップ "+(sp.slip>0?"+":"")+sp.slip.toFixed(1)+"°";
+    $("slipV").style.color=a>8?"#f43f5e":a>4?"#fbbf24":"var(--ink3)";
+    const el=document.getElementById("carArrowA");
+    if(el)el.style.transform="rotate("+sp.hd.toFixed(1)+"deg)";
+  }else{drawCar(null);$("slipV").textContent="スリップ --";}
   if(R.mapCanvas)drawMapCanvas(tms);
   const s=tms/1000;
   $("rpClock").textContent=Math.floor(s/60)+":"+(s%60).toFixed(1).padStart(4,"0");
