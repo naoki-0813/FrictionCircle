@@ -93,7 +93,7 @@
       column-gap:8px;align-items:start}
     #rpBody.hasVid #rpVideo{max-height:44vh;margin:0}
     #rpBody.hasVid .split{margin-top:0}
-    #rpBody.hasVid #rpFiles,
+    #rpBody.hasVid #rpFiles,#rpBody.hasVid #trigCard,
     #rpBody.hasVid .chartBox,#rpBody.hasVid .ctrlRow,#rpBody.hasVid #rpMeters,
     #rpBody.hasVid .statsRow,#rpBody.hasVid > .note{grid-column:1/3}
   }
@@ -150,6 +150,16 @@
       border-radius:8px;padding:4px 6px;font-size:12px}
   .tinyBtn{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
       border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer}
+  .tinyBtn.pr{background:var(--accent);color:#04222f;border:none;font-weight:700}
+  /* 再生タブのトリガ確認 */
+  #trigCard{margin-top:8px;padding:8px 10px}
+  #trigCard h3{margin-bottom:0}
+  #trigCard .ctrlRow{margin-top:6px}
+  #trigCard select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+      border-radius:8px;padding:4px 6px;font-size:12px}
+  .numS{width:56px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+      border-radius:8px;padding:4px 6px;font-size:12px;text-align:right}
+  #trigRes{color:var(--ink2);margin-top:6px;line-height:1.7}
   .fileRow{display:flex;gap:8px}
   .fileRow .btn{margin-top:0}
   input[type=file]{display:none}
@@ -232,7 +242,7 @@
         <button class="btn" id="btnLoadJsonC">比較データCを開く</button>
       </div>
       <div class="fileRow" style="margin-top:8px">
-        <button class="btn" id="btnCsv">CSVで書き出し(Excel向け)</button>
+        <button class="btn" id="btnCsv">CSVで書き出し(A/B/C全部・Excel向け)</button>
         <button class="btn" id="btnClearB" style="display:none">比較を解除(B/C)</button>
       </div>
       <div class="fileRow" style="margin-top:8px">
@@ -303,21 +313,52 @@
           </select></label>
         <button class="tinyBtn" id="btnTrimReset">範囲リセット</button>
         <label id="labTrimA" style="color:var(--accent)">A
-          <input type="range" id="trA0" min="0" max="0" value="0" step="1" style="width:76px">
-          <input type="range" id="trA1" min="0" max="0" value="0" step="1" style="width:76px">
+          <input type="range" id="trA0" min="0" max="0" value="0" step="1" style="width:96px">
+          <input type="range" id="trA1" min="0" max="0" value="0" step="1" style="width:96px">
           <span id="trVA"></span></label>
         <label id="labTrimB" style="display:none;color:#fb923c">B
-          <input type="range" id="trB0" min="0" max="0" value="0" step="1" style="width:76px">
-          <input type="range" id="trB1" min="0" max="0" value="0" step="1" style="width:76px">
+          <input type="range" id="trB0" min="0" max="0" value="0" step="1" style="width:96px">
+          <input type="range" id="trB1" min="0" max="0" value="0" step="1" style="width:96px">
           <span id="trVB"></span></label>
         <label id="labTrimC" style="display:none;color:#34d399">C
-          <input type="range" id="trC0" min="0" max="0" value="0" step="1" style="width:76px">
-          <input type="range" id="trC1" min="0" max="0" value="0" step="1" style="width:76px">
+          <input type="range" id="trC0" min="0" max="0" value="0" step="1" style="width:96px">
+          <input type="range" id="trC1" min="0" max="0" value="0" step="1" style="width:96px">
           <span id="trVC"></span></label>
+      </div>
+      <div class="card" id="trigCard">
+        <h3 style="display:flex;justify-content:space-between;cursor:pointer" id="trigTgl">
+          自動トリガの確認(記録の開始/終了条件を試す)
+          <span id="trigTglV" style="color:var(--ink3)">開く ▼</span></h3>
+        <div id="trigBody" style="display:none">
+          <div class="ctrlRow">
+            <span style="color:var(--ink3)">開始</span>
+            <select id="rpTrigSt"><option value="manual">手動(先頭から)</option>
+              <option value="speed">速度で自動開始</option><option value="g">Gで自動開始</option></select>
+            <label><input type="number" id="rpTrigStSpd" class="numS" min="3" step="1"> km/h以上</label>
+            <label><input type="number" id="rpTrigStG" class="numS" min="0.1" max="1" step="0.05"> G以上</label>
+          </div>
+          <div class="ctrlRow">
+            <span style="color:var(--ink3)">終了</span>
+            <select id="rpTrigEd"><option value="manual">手動(末尾まで)</option>
+              <option value="speed">速度低下で自動終了</option></select>
+            <label><input type="number" id="rpTrigEdSpd" class="numS" min="1" step="1"> km/h未満が</label>
+            <label><input type="number" id="rpTrigEdSec" class="numS" min="2" step="1"> 秒続いたら</label>
+          </div>
+          <div class="ctrlRow">
+            <button class="tinyBtn pr" id="btnTrigCheck">判定する</button>
+            <button class="tinyBtn" id="btnTrigApply">この範囲で切り出す(全データ)</button>
+            <label><input type="checkbox" id="rpTrigMark" checked style="width:16px;height:16px">
+              グラフに位置を表示</label>
+          </div>
+          <div class="note" id="trigRes"></div>
+          <div class="note">ここでの設定は「設定」タブの自動トリガと共通です。読み込んだ記録に条件を当てはめて、
+            どこで記録が始まり・終わるかを確認できます(判定は元データ全体に対して行います)。</div>
+        </div>
       </div>
       <div class="statsRow"><table class="statsTbl" id="statsTbl"></table></div>
       <div class="note">地図の走行ラインの色(単独時): <span class="ok">■緑=使用率60%未満</span> / <span style="color:var(--accent2)">■黄=60〜85%</span> / <span class="bad">■赤=85%以上</span>。グラフをタップするとその瞬間にジャンプします。<br>
-      比較時は摩擦円・地図・グラフすべて <span style="color:var(--accent)">■青=基準A</span> / <span style="color:#fb923c">■橙=比較B</span> / <span style="color:#34d399">■緑=比較C</span> に統一されます。スタートのズレは「B/C開始補正」で合わせます(+で遅らせる)。「表示範囲」は2本のスライダーのほか、「グラフで選択」でA/B/Cを選んでからグラフ上を左右にドラッグすると、その区間だけに絞り込めます(「範囲リセット」で全体に戻ります)。下の表には読み込んだ全ファイル(A/B/C)の最大G・平均使用率・90%超の時間が出ます。</div>
+      比較時は摩擦円・地図・グラフすべて <span style="color:var(--accent)">■青=基準A</span> / <span style="color:#fb923c">■橙=比較B</span> / <span style="color:#34d399">■緑=比較C</span> に統一されます。スタートのズレは「B/C開始補正」で合わせます(+で遅らせる)。「表示範囲」は2本のスライダーのほか、「グラフで選択」でA/B/Cを選んでからグラフ上を左右にドラッグすると、その区間だけに絞り込めます(「範囲リセット」で全体に戻ります)。下の表には読み込んだ全ファイル(A/B/C)の最大G・平均使用率・90%超の時間が出ます。
+      グラフの横軸は読み込んだ中で一番長いデータに合わせます。CSV書き出しは、表示範囲を絞った状態のA/B/C全てを1つのファイルに出力します。</div>
     </div>
     <input type="file" id="fJson" accept=".json,application/json">
     <input type="file" id="fJsonB" accept=".json,application/json">
@@ -421,12 +462,21 @@ function refreshSetUI(){
   $("setTrigStG").value=set.trig.startG; $("setTrigEd").value=set.trig.stop;
   $("setTrigEdSpd").value=set.trig.stopSpd; $("setTrigEdSec").value=set.trig.stopSec;
   $("setRearm").checked=set.trig.rearm;
+  syncTrigUI();
   updateCamTgl();
   updateStat();
   updateRunInfo();
   updateRecBtn();
 }
 /* ---- 走行登録・トリガ ---- */
+/* トリガ設定は「設定」タブと「再生」タブの両方から変更できるので、表示を揃える */
+function syncTrigUI(){
+  const rt=$("rpTrigSt");if(!rt)return;
+  rt.value=set.trig.start; $("rpTrigStSpd").value=set.trig.startSpd;
+  $("rpTrigStG").value=set.trig.startG; $("rpTrigEd").value=set.trig.stop;
+  $("rpTrigEdSpd").value=set.trig.stopSpd; $("rpTrigEdSec").value=set.trig.stopSec;
+  evalTrig();
+}
 function runLabel(){return(set.run.content?set.run.content+" ":"")+set.run.no+"本目";}
 function updateRunInfo(){
   const a=[];
@@ -476,12 +526,12 @@ function updateRecBtn(){
 $("setRunList").addEventListener("change",e=>{
   set.run.list=e.target.value.split("\n").map(s=>s.trim()).filter(Boolean);
   saveSet();updateRunInfo();});
-$("setTrigSt").addEventListener("change",e=>{set.trig.start=e.target.value;saveSet();updateRunInfo();updateRecBtn();});
-$("setTrigStSpd").addEventListener("change",e=>{set.trig.startSpd=Math.max(3,parseFloat(e.target.value)||15);saveSet();updateRunInfo();});
-$("setTrigStG").addEventListener("change",e=>{set.trig.startG=Math.min(1,Math.max(0.1,parseFloat(e.target.value)||0.3));saveSet();updateRunInfo();});
-$("setTrigEd").addEventListener("change",e=>{set.trig.stop=e.target.value;saveSet();updateRunInfo();});
-$("setTrigEdSpd").addEventListener("change",e=>{set.trig.stopSpd=Math.max(1,parseFloat(e.target.value)||8);saveSet();updateRunInfo();});
-$("setTrigEdSec").addEventListener("change",e=>{set.trig.stopSec=Math.max(2,parseInt(e.target.value)||10);saveSet();updateRunInfo();});
+$("setTrigSt").addEventListener("change",e=>{set.trig.start=e.target.value;saveSet();updateRunInfo();updateRecBtn();syncTrigUI();});
+$("setTrigStSpd").addEventListener("change",e=>{set.trig.startSpd=Math.max(3,parseFloat(e.target.value)||15);saveSet();updateRunInfo();syncTrigUI();});
+$("setTrigStG").addEventListener("change",e=>{set.trig.startG=Math.min(1,Math.max(0.1,parseFloat(e.target.value)||0.3));saveSet();updateRunInfo();syncTrigUI();});
+$("setTrigEd").addEventListener("change",e=>{set.trig.stop=e.target.value;saveSet();updateRunInfo();syncTrigUI();});
+$("setTrigEdSpd").addEventListener("change",e=>{set.trig.stopSpd=Math.max(1,parseFloat(e.target.value)||8);saveSet();updateRunInfo();syncTrigUI();});
+$("setTrigEdSec").addEventListener("change",e=>{set.trig.stopSec=Math.max(2,parseInt(e.target.value)||10);saveSet();updateRunInfo();syncTrigUI();});
 $("setRearm").addEventListener("change",e=>{set.trig.rearm=e.target.checked;saveSet();updateRunInfo();});
 function updateStat(){
   const s=[];
@@ -1160,7 +1210,7 @@ function recLoop(){
 /* ================= 再生 ================= */
 const R={data:null,playing:false,clock:0,speed:1,offset:0,dur:0,sm:30,lastT:0,
   charts:null,map:null,marker:null,marker2:null,marker3:null,mapCanvas:false,lastRAF:0,
-  origA:null,aTrim:null,trim0:0,file:"",sel:null,
+  origA:null,aTrim:null,trim0:0,file:"",sel:null,chDur:0,trig:null,
   b:{data:null,maxG:1,off:0,orig:null,trim:null,file:""},
   c:{data:null,maxG:1,off:0,orig:null,trim:null,file:""}};
 const ggRep=createGG($("ggRep"));
@@ -1189,19 +1239,35 @@ $("fJsonB").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return
   e.target.value="";});
 $("btnDemoRepB").addEventListener("click",()=>loadDataB(genDemoJson(100,7),"デモデータB"));
 $("btnClearB").addEventListener("click",clearB);
+const csvQ=v=>{const t=String(v==null?"":v);
+  return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;};
+/* 表示範囲を絞った状態の A/B/C 全てを1つのCSVに書き出す */
 $("btnCsv").addEventListener("click",()=>{
   if(!R.data){alert("先にデータ(.json)を読み込んでください");return;}
-  const S=R.data.samples,rawS=(R.data.raw&&R.data.raw.samples)||null;
-  const rows=["t_s,横G,前後G,ヨーレートdps,速度kmh,緯度,経度"+
-    (rawS?",生accX,生accY,生accZ,生rotX,生rotY,生rotZ":"")];
-  for(let i=0;i<S.length;i++){
-    const s=S[i],p=posOf(R.data.gps,s[0])||{};
-    let line=(s[0]/1000).toFixed(2)+","+s[1]+","+s[2]+","+(s[3]!=null?s[3]:"")+","+
-      (p.spd!=null?p.spd.toFixed(1):"")+","+
-      (p.lat!=null?p.lat.toFixed(6):"")+","+(p.lon!=null?p.lon.toFixed(6):"");
-    if(rawS){const r=rawS[i]&&rawS[i][0]===s[0]?rawS[i]:rawS[idxAt(rawS,s[0])];
-      line+=r?","+r.slice(1).map(v=>v!=null?v:"").join(","):",,,,,,";}
-    rows.push(line);
+  const sets=[{p:"A",nm:R.file,d:R.data,off:0}];
+  if(R.b.data)sets.push({p:"B",nm:R.b.file,d:R.b.data,off:R.b.off});
+  if(R.c.data)sets.push({p:"C",nm:R.c.file,d:R.c.data,off:R.c.off});
+  const anyRaw=sets.some(st=>st.d.raw&&st.d.raw.samples&&st.d.raw.samples.length);
+  const head=["データ","ファイル名","t_s","同期t_s","横G","前後G","横G_平滑","前後G_平滑",
+    "ヨーレートdps","速度kmh","緯度","経度"];
+  if(anyRaw)head.push("生accX","生accY","生accZ","生rotX","生rotY","生rotZ");
+  const rows=[head.join(",")];
+  for(const st of sets){
+    const S=st.d.samples,SM=st.d.S||null,rawS=(st.d.raw&&st.d.raw.samples)||null;
+    for(let i=0;i<S.length;i++){
+      const s=S[i],p=posOf(st.d.gps,s[0])||{},sm=SM?SM[Math.min(i,SM.length-1)]:null;
+      const c=[st.p,csvQ(st.nm),(s[0]/1000).toFixed(2),((s[0]+st.off*1000)/1000).toFixed(2),
+        s[1],s[2],
+        sm?sm[1].toFixed(3):"",sm?sm[2].toFixed(3):"",
+        (s[3]!=null?s[3]:""),(p.spd!=null?p.spd.toFixed(1):""),
+        (p.lat!=null?p.lat.toFixed(6):""),(p.lon!=null?p.lon.toFixed(6):"")];
+      if(anyRaw){
+        const r=rawS?(rawS[i]&&rawS[i][0]===s[0]?rawS[i]:rawS[idxAt(rawS,s[0])]):null;
+        if(r)for(const v of r.slice(1))c.push(v!=null?v:"");
+        else for(let k=0;k<6;k++)c.push("");
+      }
+      rows.push(c.join(","));
+    }
   }
   dl(new Blob(["﻿"+rows.join("\n")],{type:"text/csv"}),"fc_"+stamp()+".csv");
 });
@@ -1225,7 +1291,7 @@ function loadDataB(j,fname){
   R.b.file=cleanFile(fname)||j.name||"(ファイル名なし)";
   R.b.orig={samples:j.samples,gps:j.gps||[]};
   R.b.trim=[0,j.samples[j.samples.length-1][0]];
-  initTrim("B",R.b.trim[1]);
+  initTrim("B",R.b.trim[1],j.rate);
   $("rpOfsB").value=0;$("rpOfsBV").textContent="0.0";
   $("bOffLab").style.display="inline";$("btnClearB").style.display="block";
   $("rpMeters").classList.add("cmp");
@@ -1235,7 +1301,7 @@ function loadDataB(j,fname){
     ((j.car&&j.car.name)?j.car.name+" / ":"")+
     (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
     "─ "+(j.samples[j.samples.length-1][0]/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G";
-  applySmooth();buildMap();
+  applySmooth();buildMap();evalTrig();
 }
 function loadDataC(j,fname){
   if(!R.data){alert("先に基準データA(.json)を読み込んでください");return;}
@@ -1244,7 +1310,7 @@ function loadDataC(j,fname){
   R.c.file=cleanFile(fname)||j.name||"(ファイル名なし)";
   R.c.orig={samples:j.samples,gps:j.gps||[]};
   R.c.trim=[0,j.samples[j.samples.length-1][0]];
-  initTrim("C",R.c.trim[1]);
+  initTrim("C",R.c.trim[1],j.rate);
   $("rpOfsC").value=0;$("rpOfsCV").textContent="0.0";
   $("cOffLab").style.display="inline";$("btnClearB").style.display="block";
   $("rpMeters").classList.add("cmpC");
@@ -1254,7 +1320,7 @@ function loadDataC(j,fname){
     ((j.car&&j.car.name)?j.car.name+" / ":"")+
     (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
     "─ "+(j.samples[j.samples.length-1][0]/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G";
-  applySmooth();buildMap();
+  applySmooth();buildMap();evalTrig();
 }
 function clearB(){
   R.b.data=null;R.marker2=null;R.b.orig=null;R.b.trim=null;R.b.file="";
@@ -1267,7 +1333,7 @@ function clearB(){
   $("rpInfoB").style.display="none";$("rpInfoC").style.display="none";
   ggRep.trailB=[];ggRep.curB=null;ggRep.trailC=[];ggRep.curC=null;
   $("rpMeters").classList.remove("cmp");$("rpMeters").classList.remove("cmpC");
-  buildHist();buildCharts();updStats();drawCharts(R.lastT||0);buildMap();
+  buildHist();buildCharts();updStats();evalTrig();drawCharts(R.lastT||0);buildMap();
 }
 
 function idxAt(arr,t){let lo=0,hi=arr.length-1;
@@ -1341,11 +1407,18 @@ const cutArr=(arr,t0,t1)=>arr.filter(s=>s[0]>=t0&&s[0]<=t1)
   .map(s=>{const c=s.slice();c[0]=s[0]-t0;return c;});
 function fmtMS(ms){const s=Math.round(ms/1000);
   return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
-function initTrim(P,durMs){
-  const s0=$("tr"+P+"0"),s1=$("tr"+P+"1"),mx=Math.ceil(durMs/1000);
+/* 0.1秒まで表示する時刻表記(表示範囲・トリガ判定用) */
+function fmtMSf(ms){const s=Math.max(0,ms)/1000,m=Math.floor(s/60),r=s-m*60;
+  return m+":"+(r<10?"0":"")+r.toFixed(1);}
+const TRIM_MIN=500;   // 表示範囲の最小の長さ[ms]
+/* スライダーはms単位。刻みは記録レート=加速度センサー1サンプル分に合わせる */
+function initTrim(P,durMs,rate){
+  const s0=$("tr"+P+"0"),s1=$("tr"+P+"1");
+  const st=Math.max(1,Math.round(1000/(rate||25))),mx=Math.ceil(durMs/st)*st;
+  s0.min=0;s1.min=0;s0.step=st;s1.step=st;
   s0.max=mx;s1.max=mx;s0.value=0;s1.value=mx;
   $("labTrim"+P).style.display="inline";
-  $("trV"+P).textContent=fmtMS(0)+"〜"+fmtMS(mx*1000);
+  $("trV"+P).textContent=fmtMSf(0)+"〜"+fmtMSf(mx);
 }
 function applyTrimA(){
   const o=R.origA;if(!o)return;
@@ -1356,7 +1429,8 @@ function applyTrimA(){
   if(o.raw)j.raw={format:o.raw.format,samples:cutArr(o.raw.samples,t0,t1)};
   R.dur=j.samples[j.samples.length-1][0]||1;
   R.trim0=t0;
-  R.clock=Math.min(R.clock,R.dur);R.lastT=Math.min(R.lastT,R.dur);
+  const cd=chartDur();   // Aを絞ってもB/Cが長ければ再生位置は残す
+  R.clock=Math.min(R.clock,cd);R.lastT=Math.min(R.lastT,cd);
   buildSlip(j);
   applySmooth();buildMap();
 }
@@ -1371,11 +1445,13 @@ function applyTrimSlot(sl){
 const trimCtl={};
 ["A","B","C"].forEach(P=>{
   const s0=$("tr"+P+"0"),s1=$("tr"+P+"1");
-  const lab=()=>{$("trV"+P).textContent=fmtMS(+s0.value*1000)+"〜"+fmtMS(+s1.value*1000);};
-  s0.addEventListener("input",()=>{if(+s0.value>+s1.value-5)s0.value=Math.max(0,+s1.value-5);lab();});
-  s1.addEventListener("input",()=>{if(+s1.value<+s0.value+5)s1.value=Math.min(+s1.max,+s0.value+5);lab();});
+  const lab=()=>{$("trV"+P).textContent=fmtMSf(+s0.value)+"〜"+fmtMSf(+s1.value);};
+  s0.addEventListener("input",()=>{
+    if(+s0.value>+s1.value-TRIM_MIN)s0.value=Math.max(0,+s1.value-TRIM_MIN);lab();});
+  s1.addEventListener("input",()=>{
+    if(+s1.value<+s0.value+TRIM_MIN)s1.value=Math.min(+s1.max,+s0.value+TRIM_MIN);lab();});
   const apply=()=>{
-    const rg=[+s0.value*1000,+s1.value*1000];
+    const rg=[+s0.value,+s1.value];
     if(P==="A"){if(!R.data)return;R.aTrim=rg;applyTrimA();}
     else{const sl=P==="B"?R.b:R.c;if(!sl.data)return;sl.trim=rg;applyTrimSlot(sl);}
   };
@@ -1386,10 +1462,11 @@ const trimHasData=P=>P==="A"?!!R.data:(P==="B"?!!R.b.data:!!R.c.data);
 /* 元データ(トリム前)の時刻[ms]で表示範囲を設定する: グラフのドラッグ選択・リセット用 */
 function setTrimRange(P,t0,t1){
   const ct=trimCtl[P];if(!ct||!trimHasData(P))return;
-  const mx=+ct.s1.max;
-  let a=Math.round(Math.min(t0,t1)/1000),b=Math.round(Math.max(t0,t1)/1000);
-  a=Math.max(0,Math.min(Math.max(0,mx-5),a));
-  b=Math.min(mx,Math.max(a+5,b));
+  const mx=+ct.s1.max,st=+ct.s0.step||1;
+  const q=v=>Math.round(v/st)*st;          // 加速度サンプルの刻みに合わせる
+  let a=q(Math.min(t0,t1)),b=q(Math.max(t0,t1));
+  a=Math.max(0,Math.min(Math.max(0,mx-TRIM_MIN),a));
+  b=Math.min(mx,Math.max(a+TRIM_MIN,b));
   ct.s0.value=a;ct.s1.value=b;ct.lab();ct.apply();
 }
 /* 現在の表示範囲の先頭が、元データの何ms目か */
@@ -1406,15 +1483,99 @@ $("trimTgt").addEventListener("change",e=>{
   if(P&&!trimHasData(P)){alert(P+"のデータが読み込まれていません");e.target.value="";}
   setSelMode(!!$("trimTgt").value);
 });
+/* ---- 自動トリガの確認: 記録側と同じ条件を、読み込んだ元データに当てはめる ---- */
+function trigOf(orig){
+  const S=orig&&orig.samples;
+  if(!S||!S.length)return null;
+  const g=orig.gps||[];
+  const spdAt=t=>{const p=posOf(g,t);return(p&&p.spd!=null)?p.spd:null;};
+  const end=S[S.length-1][0];
+  let st=0;
+  if(set.trig.start==="speed"){
+    st=null;
+    for(const v of S){const sp=spdAt(v[0]);if(sp!=null&&sp>=set.trig.startSpd){st=v[0];break;}}
+  }else if(set.trig.start==="g"){
+    st=null;
+    for(const v of S){if(Math.hypot(v[1],v[2])>=set.trig.startG){st=v[0];break;}}
+  }
+  let ed=end;
+  if(st!=null&&set.trig.stop==="speed"){
+    // 記録側と同じ: 一度しっかり走った(armSpd以上)後、低速が指定秒続いたら終了
+    const armSpd=Math.max(set.trig.stopSpd+5,set.trig.startSpd);
+    let armed=false,lowT=null;ed=null;
+    for(const v of S){
+      if(v[0]<st)continue;
+      const sp=spdAt(v[0]);if(sp==null)continue;
+      if(sp>=armSpd)armed=true;
+      if(!armed)continue;
+      if(sp<set.trig.stopSpd){
+        if(lowT==null)lowT=v[0];
+        else if(v[0]-lowT>=set.trig.stopSec*1000){ed=v[0];break;}
+      }else lowT=null;
+    }
+    if(ed==null)ed=end;
+  }
+  return{st,ed,end};
+}
+function evalTrig(){
+  const box=$("trigRes");if(!box)return;
+  R.trig=null;
+  if(!R.data){box.textContent="データを読み込むと判定できます。";return;}
+  const out={},txt=[];
+  for(const[p,o]of[["A",R.origA],["B",R.b.orig],["C",R.c.orig]]){
+    if(!o||!trimHasData(p))continue;
+    const r=trigOf(o);if(!r)continue;
+    out[p]=r;
+    txt.push(p+" "+(p==="A"?R.file:(p==="B"?R.b.file:R.c.file))+": "+
+      (r.st==null?"開始条件に達しませんでした":
+        "開始 "+fmtMSf(r.st)+" → 終了 "+fmtMSf(r.ed)+
+        " (走行 "+((r.ed-r.st)/1000).toFixed(1)+"秒 / 全体 "+fmtMSf(r.end)+")"));
+  }
+  R.trig=out;
+  box.innerHTML=txt.map(escH).join("<br>");
+  if(R.charts)drawCharts(R.lastT||0);
+}
+function applyTrig(){
+  if(!R.trig){evalTrig();}
+  let cnt=0;
+  for(const p of["A","B","C"]){
+    const t=R.trig&&R.trig[p];
+    if(!t||t.st==null||!trimHasData(p))continue;
+    setTrimRange(p,t.st,t.ed);cnt++;
+  }
+  if(!cnt)alert("切り出せる範囲がありません(開始条件に達していません)");
+}
+$("trigTgl").addEventListener("click",()=>{
+  const b=$("trigBody"),on=b.style.display==="none";
+  b.style.display=on?"block":"none";
+  $("trigTglV").textContent=on?"たたむ ▲":"開く ▼";
+  if(on)evalTrig();
+  sizeRep();
+});
+const trigSync=()=>{saveSet();refreshSetUI();};
+$("rpTrigSt").addEventListener("change",e=>{set.trig.start=e.target.value;trigSync();});
+$("rpTrigStSpd").addEventListener("change",e=>{
+  set.trig.startSpd=Math.max(3,parseFloat(e.target.value)||15);trigSync();});
+$("rpTrigStG").addEventListener("change",e=>{
+  set.trig.startG=Math.min(1,Math.max(0.1,parseFloat(e.target.value)||0.3));trigSync();});
+$("rpTrigEd").addEventListener("change",e=>{set.trig.stop=e.target.value;trigSync();});
+$("rpTrigEdSpd").addEventListener("change",e=>{
+  set.trig.stopSpd=Math.max(1,parseFloat(e.target.value)||8);trigSync();});
+$("rpTrigEdSec").addEventListener("change",e=>{
+  set.trig.stopSec=Math.max(2,parseInt(e.target.value)||10);trigSync();});
+$("btnTrigCheck").addEventListener("click",evalTrig);
+$("btnTrigApply").addEventListener("click",applyTrig);
+$("rpTrigMark").addEventListener("change",()=>drawCharts(R.lastT||0));
+
 $("btnTrimReset").addEventListener("click",()=>{
   const P=$("trimTgt").value;
   if(!P){alert("「グラフで選択」でA/B/Cを選んでから押してください");return;}
   if(!trimHasData(P))return;
-  setTrimRange(P,0,+trimCtl[P].s1.max*1000);
+  setTrimRange(P,0,+trimCtl[P].s1.max);
 });
 
 /* ---- 読み込んだファイル名 (走行内容_◯本目 が入っているのでそのまま表示する) ---- */
-const cleanFile=nm=>String(nm||"").replace(/.json$/i,"").trim();
+const cleanFile=nm=>String(nm||"").replace(/\.json$/i,"").trim();
 function updFileNames(){
   const box=$("rpFiles");if(!box)return;
   const rows=[["A",R.file,"var(--accent)"]];
@@ -1436,7 +1597,7 @@ function loadData(j,fname){
   R.dur=j.samples[j.samples.length-1][0]||1;
   R.origA={samples:j.samples,gps:j.gps||[],raw:j.raw||null};
   R.aTrim=[0,R.dur];R.trim0=0;
-  initTrim("A",R.dur);
+  initTrim("A",R.dur,j.rate);
   buildSlip(j);
   $("rpBody").style.display="block";
   $("rpInfo").textContent="ファイル: "+R.file+" ─ "+(j.name?j.name+" / ":"")+(j.car?j.car.name+" / ":"")+
@@ -1447,7 +1608,7 @@ function loadData(j,fname){
   R.sm=(typeof j.smooth==="number")?j.smooth:set.smooth;
   $("rpSmooth").value=R.sm;$("rpSmoothV").textContent=R.sm;
   setLoadMini(true); // 読み込み後はボタン群を折りたたむ
-  sizeRep();applySmooth();buildMap();
+  sizeRep();applySmooth();buildMap();evalTrig();
   $("btnPlay").textContent="▶ 再生";
 }
 /* 読み込んだ全データ(A/B/C)について、表示範囲内の統計を1つの表に出す */
@@ -1546,8 +1707,20 @@ function chRange(key){
   const m=Math.max(step,Math.ceil(mx/step)*step);
   return{min:-m,max:m,zero:true};
 }
+/* グラフ横軸の長さ: A/B/C のうち(開始補正を含めて)一番遠くまで伸びるデータに合わせる */
+function chartDur(){
+  let d=R.dur||1;
+  for(const sl of[R.b,R.c]){
+    if(!sl.data)continue;
+    const S=sl.data.samples,e=S[S.length-1][0]+sl.off*1000;
+    if(e>d)d=e;
+  }
+  return Math.max(1,d);
+}
+const chd=()=>R.chDur||R.dur||1;
 function buildCharts(){
   if(!R.data)return;
+  R.chDur=chartDur();
   R.charts=[];
   const d=devicePixelRatio||1;
   for(let n=0;n<3;n++){
@@ -1568,7 +1741,7 @@ function buildCharts(){
       const pts=[];
       c.strokeStyle=col;c.lineWidth=1.5*d;c.beginPath();let pen=false;
       for(let x=0;x<W;x+=2){
-        const t2=x/W*R.dur-slot.off*1000;
+        const t2=x/W*R.chDur-slot.off*1000;
         if(t2<0||t2>dur2){pen=false;continue;}
         const v=chVal(slot,key,t2,isA);
         if(v==null){pen=false;continue;}
@@ -1607,12 +1780,30 @@ function drawCharts(t){
     c.drawImage(ch.off,0,0);
     if(R.sel){
       const W=ch.cv.width,H=ch.cv.height;
-      const x0=Math.min(R.sel.t0,R.sel.t1)/R.dur*W,x1=Math.max(R.sel.t0,R.sel.t1)/R.dur*W;
+      const x0=Math.min(R.sel.t0,R.sel.t1)/chd()*W,x1=Math.max(R.sel.t0,R.sel.t1)/chd()*W;
       c.fillStyle=SELFILL[R.sel.P];c.fillRect(x0,0,x1-x0,H);
       c.strokeStyle=SELCOL[R.sel.P];c.lineWidth=1.5*d;
       c.beginPath();c.moveTo(x0,0);c.lineTo(x0,H);c.moveTo(x1,0);c.lineTo(x1,H);c.stroke();
     }
-    const x=t/R.dur*ch.cv.width;
+    if(R.trig&&$("rpTrigMark").checked){
+      const W=ch.cv.width,H=ch.cv.height;
+      for(const p of["A","B","C"]){
+        const tg=R.trig[p];if(!tg||!trimHasData(p))continue;
+        const ofs=(p==="A"?0:(p==="B"?R.b.off:R.c.off))*1000,base=trimBase(p);
+        const ly=H-3*d-(p==="A"?0:p==="B"?10*d:20*d);   // A/B/Cでラベルの高さをずらす
+        const mark=(tv,txt)=>{
+          if(tv==null)return;
+          const mx2=(tv-base+ofs)/chd()*W;
+          if(mx2<0||mx2>W)return;
+          c.strokeStyle=SELCOL[p];c.lineWidth=1.5*d;c.setLineDash([3*d,3*d]);
+          c.beginPath();c.moveTo(mx2,0);c.lineTo(mx2,H);c.stroke();c.setLineDash([]);
+          c.fillStyle=SELCOL[p];c.font="bold "+(9*d)+"px sans-serif";
+          c.fillText(txt,Math.min(W-16*d,mx2+2*d),ly);
+        };
+        mark(tg.st,p+"開");mark(tg.ed,p+"終");
+      }
+    }
+    const x=t/chd()*ch.cv.width;
     c.strokeStyle="#fbbf24";c.lineWidth=2*d;
     c.beginPath();c.moveTo(x,0);c.lineTo(x,ch.cv.height);c.stroke();
   }
@@ -1815,14 +2006,14 @@ function renderAt(tms){
   $("rpClock").textContent=Math.floor(s/60)+":"+(s%60).toFixed(1).padStart(4,"0");
 }
 function seek(tms){
-  tms=Math.max(0,Math.min(R.dur,tms));
+  tms=Math.max(0,Math.min(chd(),tms));
   if(rpV.src)rpV.currentTime=Math.max(0,(tms+R.trim0)/1000-R.offset);
   else R.clock=tms;
   renderAt(tms);
 }
 let stripDrag=null,selDrag=null;
 const stripT=(cv,e)=>{const r=cv.getBoundingClientRect();
-  return Math.max(0,Math.min(R.dur,(e.clientX-r.left)/r.width*R.dur));};
+  return Math.max(0,Math.min(chd(),(e.clientX-r.left)/r.width*chd()));};
 [0,1,2].forEach(n=>$("strip"+n).addEventListener("pointerdown",e=>{
   if(!R.data)return;
   const cv=$("strip"+n),P=$("trimTgt").value;
@@ -1859,7 +2050,7 @@ $("btnPlay").addEventListener("click",()=>{
   if(!R.data)return;
   if(rpV.src){rpV.paused?rpV.play():rpV.pause();}
   else{R.playing=!R.playing;R.lastRAF=performance.now();
-    if(R.playing&&R.clock>=R.dur)R.clock=0;}
+    if(R.playing&&R.clock>=chd())R.clock=0;}
 });
 $("rpSpeed").addEventListener("change",e=>{
   R.speed=parseFloat(e.target.value);rpV.playbackRate=R.speed;});
@@ -1873,11 +2064,11 @@ function repLoop(){
   if(rpV.src){tms=(rpV.currentTime+R.offset)*1000-R.trim0;R.playing=!rpV.paused&&!rpV.ended;}
   else{
     const now=performance.now();
-    if(R.playing){R.clock=Math.min(R.dur,R.clock+(now-R.lastRAF)*R.speed);
-      if(R.clock>=R.dur)R.playing=false;}
+    if(R.playing){R.clock=Math.min(chd(),R.clock+(now-R.lastRAF)*R.speed);
+      if(R.clock>=chd())R.playing=false;}
     R.lastRAF=now;tms=R.clock;
   }
-  renderAt(Math.max(0,Math.min(R.dur,tms)));
+  renderAt(Math.max(0,Math.min(chd(),tms)));
   $("btnPlay").textContent=R.playing?"❚❚ 一時停止":"▶ 再生";
 }
 requestAnimationFrame(repLoop);
