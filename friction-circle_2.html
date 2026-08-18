@@ -93,6 +93,7 @@
       column-gap:8px;align-items:start}
     #rpBody.hasVid #rpVideo{max-height:44vh;margin:0}
     #rpBody.hasVid .split{margin-top:0}
+    #rpBody.hasVid #rpFiles,
     #rpBody.hasVid .chartBox,#rpBody.hasVid .ctrlRow,#rpBody.hasVid #rpMeters,
     #rpBody.hasVid .statsRow,#rpBody.hasVid > .note{grid-column:1/3}
   }
@@ -131,10 +132,24 @@
   .ctrlRow .pb{background:var(--accent);color:#04222f;border:none;border-radius:8px;font-weight:700;
       padding:8px 18px;font-size:14px;cursor:pointer}
   .ctrlRow select,.ctrlRow input[type=range]{accent-color:var(--accent)}
-  .statsRow{display:flex;gap:8px;margin-top:8px}
-  .stat{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
-  .stat .l{font-size:10px;color:var(--ink3)}
-  .stat .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+  .statsRow{margin-top:8px;background:var(--panel);border:1px solid var(--line);
+      border-radius:10px;padding:6px 8px;overflow-x:auto}
+  .statsTbl{width:100%;border-collapse:collapse}
+  .statsTbl th{font-size:10px;color:var(--ink3);font-weight:600;text-align:right;padding:2px 6px;white-space:nowrap}
+  .statsTbl th:first-child{text-align:left}
+  .statsTbl td{font-size:14px;font-weight:700;text-align:right;padding:4px 6px;
+      font-variant-numeric:tabular-nums;border-top:1px solid var(--line);white-space:nowrap}
+  .statsTbl td.nm{text-align:left;font-size:11px;font-weight:600;max-width:34vw;
+      overflow:hidden;text-overflow:ellipsis}
+  /* 読み込み中のファイル名(走行内容が分かるようファイル名をそのまま表示) */
+  #rpFiles{display:flex;flex-wrap:wrap;gap:2px 14px;font-size:11px;font-weight:700;
+      margin:0 2px 6px;line-height:1.5}
+  #rpFiles .tag{opacity:.7;font-weight:600;margin-right:3px}
+  .chartBox canvas.selMode{touch-action:none;cursor:col-resize}
+  #trimTgt{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+      border-radius:8px;padding:4px 6px;font-size:12px}
+  .tinyBtn{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+      border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer}
   .fileRow{display:flex;gap:8px}
   .fileRow .btn{margin-top:0}
   input[type=file]{display:none}
@@ -238,6 +253,7 @@
       </div>
     </div>
     <div id="rpBody" style="display:none">
+      <div id="rpFiles"></div>
       <video id="rpVideo" playsinline controls muted></video>
       <div class="split">
         <div id="rpGGbox"><canvas id="ggRep" class="gg"></canvas></div>
@@ -280,6 +296,12 @@
       </div>
       <div class="ctrlRow" id="trimRow">
         <span style="color:var(--ink3)">表示範囲</span>
+        <label>グラフで選択
+          <select id="trimTgt">
+            <option value="">しない(タップで移動)</option>
+            <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+          </select></label>
+        <button class="tinyBtn" id="btnTrimReset">範囲リセット</button>
         <label id="labTrimA" style="color:var(--accent)">A
           <input type="range" id="trA0" min="0" max="0" value="0" step="1" style="width:76px">
           <input type="range" id="trA1" min="0" max="0" value="0" step="1" style="width:76px">
@@ -293,13 +315,9 @@
           <input type="range" id="trC1" min="0" max="0" value="0" step="1" style="width:76px">
           <span id="trVC"></span></label>
       </div>
-      <div class="statsRow">
-        <div class="stat"><div class="l">最大G</div><div class="v" id="stMax">-</div></div>
-        <div class="stat"><div class="l">平均使用率</div><div class="v" id="stAvg">-</div></div>
-        <div class="stat"><div class="l">90%超の時間</div><div class="v" id="stHi">-</div></div>
-      </div>
+      <div class="statsRow"><table class="statsTbl" id="statsTbl"></table></div>
       <div class="note">地図の走行ラインの色(単独時): <span class="ok">■緑=使用率60%未満</span> / <span style="color:var(--accent2)">■黄=60〜85%</span> / <span class="bad">■赤=85%以上</span>。グラフをタップするとその瞬間にジャンプします。<br>
-      比較時は摩擦円・地図・グラフすべて <span style="color:var(--accent)">■青=基準A</span> / <span style="color:#fb923c">■橙=比較B</span> / <span style="color:#34d399">■緑=比較C</span> に統一されます。スタートのズレは「B/C開始補正」で合わせます(+で遅らせる)。「表示範囲」の2本のスライダーで各データの開始/終了を絞り、走行前後の不要な区間(待機中など)を切り落とせます。</div>
+      比較時は摩擦円・地図・グラフすべて <span style="color:var(--accent)">■青=基準A</span> / <span style="color:#fb923c">■橙=比較B</span> / <span style="color:#34d399">■緑=比較C</span> に統一されます。スタートのズレは「B/C開始補正」で合わせます(+で遅らせる)。「表示範囲」は2本のスライダーのほか、「グラフで選択」でA/B/Cを選んでからグラフ上を左右にドラッグすると、その区間だけに絞り込めます(「範囲リセット」で全体に戻ります)。下の表には読み込んだ全ファイル(A/B/C)の最大G・平均使用率・90%超の時間が出ます。</div>
     </div>
     <input type="file" id="fJson" accept=".json,application/json">
     <input type="file" id="fJsonB" accept=".json,application/json">
@@ -1080,10 +1098,10 @@ async function renderSavedList(){
       if(v&&v.blob){rpV.src=URL.createObjectURL(v.blob);rpV.style.display="block";
         rpV.playbackRate=R.speed;$("rpBody").classList.add("hasVid");}
       else{rpV.removeAttribute("src");rpV.style.display="none";$("rpBody").classList.remove("hasVid");}
-      loadData(JSON.parse(JSON.stringify(it.json)));
+      loadData(JSON.parse(JSON.stringify(it.json)),(it.name||"無題")+"(ブラウザ内保存)");
     });
-    mk("Bとして",()=>loadDataB(JSON.parse(JSON.stringify(it.json))));
-    mk("Cとして",()=>loadDataC(JSON.parse(JSON.stringify(it.json))));
+    mk("Bとして",()=>loadDataB(JSON.parse(JSON.stringify(it.json)),(it.name||"無題")+"(ブラウザ内保存)"));
+    mk("Cとして",()=>loadDataC(JSON.parse(JSON.stringify(it.json)),(it.name||"無題")+"(ブラウザ内保存)"));
     mk("書き出し",()=>dl(new Blob([JSON.stringify(it.json)],{type:"application/json"}),
       "fc_"+(it.name?it.name.replace(/\s+/g,"_")+"_":"")+(it.date||"").slice(0,10)+".json"));
     mk("削除",async()=>{
@@ -1097,7 +1115,7 @@ async function renderSavedList(){
 $("btnPasteTgl").addEventListener("click",()=>{
   const a=$("pasteArea");a.style.display=a.style.display==="none"?"block":"none";});
 $("btnPasteLoad").addEventListener("click",()=>{
-  try{loadData(JSON.parse($("pasteText").value.trim()));$("pasteText").value="";}
+  try{loadData(JSON.parse($("pasteText").value.trim()),"貼り付けデータ");$("pasteText").value="";}
   catch(e){alert("読み込めませんでした。コピーしたデータ全体を貼り付けてください。("+e+")");}
 });
 function stamp(){const d=new Date(),z=n=>String(n).padStart(2,"0");
@@ -1142,8 +1160,9 @@ function recLoop(){
 /* ================= 再生 ================= */
 const R={data:null,playing:false,clock:0,speed:1,offset:0,dur:0,sm:30,lastT:0,
   charts:null,map:null,marker:null,marker2:null,marker3:null,mapCanvas:false,lastRAF:0,
-  origA:null,aTrim:null,trim0:0,
-  b:{data:null,maxG:1,off:0,orig:null,trim:null},c:{data:null,maxG:1,off:0,orig:null,trim:null}};
+  origA:null,aTrim:null,trim0:0,file:"",sel:null,
+  b:{data:null,maxG:1,off:0,orig:null,trim:null,file:""},
+  c:{data:null,maxG:1,off:0,orig:null,trim:null,file:""}};
 const ggRep=createGG($("ggRep"));
 const rpV=$("rpVideo");
 const BCOL=["#34d399","#fbbf24","#f43f5e"];
@@ -1157,18 +1176,18 @@ $("loadTgl").addEventListener("click",()=>setLoadMini(!$("loadCard").classList.c
 $("btnLoadJson").addEventListener("click",()=>$("fJson").click());
 $("btnLoadVideo").addEventListener("click",()=>$("fVideo").click());
 $("fJson").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
-  f.text().then(t=>{try{loadData(JSON.parse(t));}catch(err){alert("読み込めませんでした: "+err);}});
+  f.text().then(t=>{try{loadData(JSON.parse(t),f.name);}catch(err){alert("読み込めませんでした: "+err);}});
   e.target.value="";});
 $("fVideo").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
   rpV.src=URL.createObjectURL(f);rpV.style.display="block";rpV.playbackRate=R.speed;
   $("rpBody").classList.add("hasVid");sizeRep();
   e.target.value="";});
-$("btnDemoRep").addEventListener("click",()=>loadData(genDemoJson(120)));
+$("btnDemoRep").addEventListener("click",()=>loadData(genDemoJson(120),"デモデータ"));
 $("btnLoadJsonB").addEventListener("click",()=>$("fJsonB").click());
 $("fJsonB").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
-  f.text().then(t=>{try{loadDataB(JSON.parse(t));}catch(err){alert("読み込めませんでした: "+err);}});
+  f.text().then(t=>{try{loadDataB(JSON.parse(t),f.name);}catch(err){alert("読み込めませんでした: "+err);}});
   e.target.value="";});
-$("btnDemoRepB").addEventListener("click",()=>loadDataB(genDemoJson(100,7)));
+$("btnDemoRepB").addEventListener("click",()=>loadDataB(genDemoJson(100,7),"デモデータB"));
 $("btnClearB").addEventListener("click",clearB);
 $("btnCsv").addEventListener("click",()=>{
   if(!R.data){alert("先にデータ(.json)を読み込んでください");return;}
@@ -1192,17 +1211,18 @@ $("rpOfsB").addEventListener("input",e=>{
   buildCharts();drawCharts(R.lastT||0);});
 $("btnLoadJsonC").addEventListener("click",()=>$("fJsonC").click());
 $("fJsonC").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
-  f.text().then(t=>{try{loadDataC(JSON.parse(t));}catch(err){alert("読み込めませんでした: "+err);}});
+  f.text().then(t=>{try{loadDataC(JSON.parse(t),f.name);}catch(err){alert("読み込めませんでした: "+err);}});
   e.target.value="";});
 $("rpOfsC").addEventListener("input",e=>{
   R.c.off=parseFloat(e.target.value);
   $("rpOfsCV").textContent=R.c.off.toFixed(1);
   buildCharts();drawCharts(R.lastT||0);});
 
-function loadDataB(j){
+function loadDataB(j,fname){
   if(!R.data){alert("先に基準データA(.json)を読み込んでください");return;}
   if(!j||!Array.isArray(j.samples)||!j.samples.length){alert("データ形式が違います");return;}
   R.b.data=j;R.b.maxG=(j.car&&j.car.maxG)||set.carMaxG;R.b.off=0;
+  R.b.file=cleanFile(fname)||j.name||"(ファイル名なし)";
   R.b.orig={samples:j.samples,gps:j.gps||[]};
   R.b.trim=[0,j.samples[j.samples.length-1][0]];
   initTrim("B",R.b.trim[1]);
@@ -1211,16 +1231,17 @@ function loadDataB(j){
   $("rpMeters").classList.add("cmp");
   let mx=0;for(const s of j.samples)mx=Math.max(mx,Math.hypot(s[1],s[2]));
   $("rpInfoB").style.display="block";
-  $("rpInfoB").textContent="比較B: "+(j.name?j.name+" / ":"")+
+  $("rpInfoB").textContent="比較B: "+R.b.file+" ─ "+(j.name?j.name+" / ":"")+
     ((j.car&&j.car.name)?j.car.name+" / ":"")+
     (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
     "─ "+(j.samples[j.samples.length-1][0]/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G";
   applySmooth();buildMap();
 }
-function loadDataC(j){
+function loadDataC(j,fname){
   if(!R.data){alert("先に基準データA(.json)を読み込んでください");return;}
   if(!j||!Array.isArray(j.samples)||!j.samples.length){alert("データ形式が違います");return;}
   R.c.data=j;R.c.maxG=(j.car&&j.car.maxG)||set.carMaxG;R.c.off=0;
+  R.c.file=cleanFile(fname)||j.name||"(ファイル名なし)";
   R.c.orig={samples:j.samples,gps:j.gps||[]};
   R.c.trim=[0,j.samples[j.samples.length-1][0]];
   initTrim("C",R.c.trim[1]);
@@ -1229,22 +1250,24 @@ function loadDataC(j){
   $("rpMeters").classList.add("cmpC");
   let mx=0;for(const s of j.samples)mx=Math.max(mx,Math.hypot(s[1],s[2]));
   $("rpInfoC").style.display="block";
-  $("rpInfoC").textContent="比較C: "+(j.name?j.name+" / ":"")+
+  $("rpInfoC").textContent="比較C: "+R.c.file+" ─ "+(j.name?j.name+" / ":"")+
     ((j.car&&j.car.name)?j.car.name+" / ":"")+
     (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
     "─ "+(j.samples[j.samples.length-1][0]/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G";
   applySmooth();buildMap();
 }
 function clearB(){
-  R.b.data=null;R.marker2=null;R.b.orig=null;R.b.trim=null;
-  R.c.data=null;R.marker3=null;R.c.orig=null;R.c.trim=null;
+  R.b.data=null;R.marker2=null;R.b.orig=null;R.b.trim=null;R.b.file="";
+  R.c.data=null;R.marker3=null;R.c.orig=null;R.c.trim=null;R.c.file="";
+  if($("trimTgt").value!=="A"){$("trimTgt").value="";
+    [0,1,2].forEach(i=>$("strip"+i).classList.remove("selMode"));R.sel=null;}
   $("labTrimB").style.display="none";$("labTrimC").style.display="none";
   $("bOffLab").style.display="none";$("cOffLab").style.display="none";
   $("btnClearB").style.display="none";
   $("rpInfoB").style.display="none";$("rpInfoC").style.display="none";
   ggRep.trailB=[];ggRep.curB=null;ggRep.trailC=[];ggRep.curC=null;
   $("rpMeters").classList.remove("cmp");$("rpMeters").classList.remove("cmpC");
-  buildHist();buildCharts();drawCharts(R.lastT||0);buildMap();
+  buildHist();buildCharts();updStats();drawCharts(R.lastT||0);buildMap();
 }
 
 function idxAt(arr,t){let lo=0,hi=arr.length-1;
@@ -1345,6 +1368,7 @@ function applyTrimSlot(sl){
   j.gps=o.gps.length?cutArr(o.gps,t0,t1):[];
   applySmooth();buildMap();
 }
+const trimCtl={};
 ["A","B","C"].forEach(P=>{
   const s0=$("tr"+P+"0"),s1=$("tr"+P+"1");
   const lab=()=>{$("trV"+P).textContent=fmtMS(+s0.value*1000)+"〜"+fmtMS(+s1.value*1000);};
@@ -1356,11 +1380,58 @@ function applyTrimSlot(sl){
     else{const sl=P==="B"?R.b:R.c;if(!sl.data)return;sl.trim=rg;applyTrimSlot(sl);}
   };
   s0.addEventListener("change",apply);s1.addEventListener("change",apply);
+  trimCtl[P]={s0,s1,lab,apply};
+});
+const trimHasData=P=>P==="A"?!!R.data:(P==="B"?!!R.b.data:!!R.c.data);
+/* 元データ(トリム前)の時刻[ms]で表示範囲を設定する: グラフのドラッグ選択・リセット用 */
+function setTrimRange(P,t0,t1){
+  const ct=trimCtl[P];if(!ct||!trimHasData(P))return;
+  const mx=+ct.s1.max;
+  let a=Math.round(Math.min(t0,t1)/1000),b=Math.round(Math.max(t0,t1)/1000);
+  a=Math.max(0,Math.min(Math.max(0,mx-5),a));
+  b=Math.min(mx,Math.max(a+5,b));
+  ct.s0.value=a;ct.s1.value=b;ct.lab();ct.apply();
+}
+/* 現在の表示範囲の先頭が、元データの何ms目か */
+function trimBase(P){
+  if(P==="A")return R.aTrim?R.aTrim[0]:0;
+  const sl=P==="B"?R.b:R.c;return sl.trim?sl.trim[0]:0;
+}
+function setSelMode(on){
+  [0,1,2].forEach(i=>$("strip"+i).classList.toggle("selMode",on));
+  R.sel=null;if(R.charts)drawCharts(R.lastT||0);
+}
+$("trimTgt").addEventListener("change",e=>{
+  const P=e.target.value;
+  if(P&&!trimHasData(P)){alert(P+"のデータが読み込まれていません");e.target.value="";}
+  setSelMode(!!$("trimTgt").value);
+});
+$("btnTrimReset").addEventListener("click",()=>{
+  const P=$("trimTgt").value;
+  if(!P){alert("「グラフで選択」でA/B/Cを選んでから押してください");return;}
+  if(!trimHasData(P))return;
+  setTrimRange(P,0,+trimCtl[P].s1.max*1000);
 });
 
-function loadData(j){
+/* ---- 読み込んだファイル名 (走行内容_◯本目 が入っているのでそのまま表示する) ---- */
+const cleanFile=nm=>String(nm||"").replace(/.json$/i,"").trim();
+function updFileNames(){
+  const box=$("rpFiles");if(!box)return;
+  const rows=[["A",R.file,"var(--accent)"]];
+  if(R.b.data)rows.push(["B",R.b.file,"#fb923c"]);
+  if(R.c.data)rows.push(["C",R.c.file,"#34d399"]);
+  box.innerHTML="";
+  for(const[p,nm,col]of rows){
+    const d=document.createElement("div");d.style.color=col;
+    const tg=document.createElement("span");tg.className="tag";tg.textContent=p+":";
+    d.appendChild(tg);d.appendChild(document.createTextNode(nm||"(ファイル名なし)"));
+    box.appendChild(d);
+  }
+}
+function loadData(j,fname){
   if(!j||!Array.isArray(j.samples)||!j.samples.length){alert("データ形式が違います");return;}
   R.data=j;R.clock=0;R.playing=false;
+  R.file=cleanFile(fname)||j.name||"(ファイル名なし)";
   if(j.car&&j.car.maxG){set.carMaxG=j.car.maxG;if(j.car.name)set.carName=j.car.name;refreshSetUI();}
   R.dur=j.samples[j.samples.length-1][0]||1;
   R.origA={samples:j.samples,gps:j.gps||[],raw:j.raw||null};
@@ -1368,7 +1439,7 @@ function loadData(j){
   initTrim("A",R.dur);
   buildSlip(j);
   $("rpBody").style.display="block";
-  $("rpInfo").textContent=(j.name?j.name+" / ":"")+(j.car?j.car.name+" / ":"")+
+  $("rpInfo").textContent="ファイル: "+R.file+" ─ "+(j.name?j.name+" / ":"")+(j.car?j.car.name+" / ":"")+
     (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
     "─ "+(R.dur/1000).toFixed(0)+"秒 / GPS点 "+(j.gps?j.gps.length:0);
   R.offset=(typeof j.videoLag==="number")?Math.max(-3,Math.min(3,j.videoLag)):0;
@@ -1379,15 +1450,28 @@ function loadData(j){
   sizeRep();applySmooth();buildMap();
   $("btnPlay").textContent="▶ 再生";
 }
+/* 読み込んだ全データ(A/B/C)について、表示範囲内の統計を1つの表に出す */
+const escH=v=>String(v).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function updStats(){
   if(!R.data)return;
-  const S=R.data.S||R.data.samples;
-  let mx=0,sum=0,hi=0;
-  for(const s of S){const g=Math.hypot(s[1],s[2]);mx=Math.max(mx,g);sum+=g;
-    if(g/set.carMaxG>=0.9)hi++;}
-  $("stMax").textContent=mx.toFixed(2)+"G";
-  $("stAvg").textContent=Math.round(sum/S.length/set.carMaxG*100)+"%";
-  $("stHi").textContent=Math.round(hi/(R.data.rate||25))+"s";
+  updFileNames();
+  const tb=$("statsTbl");if(!tb)return;
+  const rows=[{p:"A",nm:R.file,col:"var(--accent)",d:R.data,maxG:set.carMaxG}];
+  if(R.b.data)rows.push({p:"B",nm:R.b.file,col:"#fb923c",d:R.b.data,maxG:R.b.maxG});
+  if(R.c.data)rows.push({p:"C",nm:R.c.file,col:"#34d399",d:R.c.data,maxG:R.c.maxG});
+  let h="<tr><th>データ</th><th>時間</th><th>最大G</th><th>平均使用率</th><th>90%超</th></tr>";
+  for(const r of rows){
+    const S=r.d.S||r.d.samples;
+    let mx=0,sum=0,hi=0;
+    for(const s of S){const g=Math.hypot(s[1],s[2]);if(g>mx)mx=g;sum+=g;
+      if(g/r.maxG>=0.9)hi++;}
+    h+="<tr><td class='nm' style='color:"+r.col+"'>"+escH(r.p+" "+(r.nm||"(ファイル名なし)"))+"</td>"+
+       "<td>"+fmtMS(S[S.length-1][0])+"</td>"+
+       "<td>"+mx.toFixed(2)+"G</td>"+
+       "<td>"+Math.round(sum/S.length/r.maxG*100)+"%</td>"+
+       "<td>"+Math.round(hi/(r.d.rate||25))+"s</td></tr>";
+  }
+  tb.innerHTML=h;
 }
 function applySmooth(){
   if(!R.data)return;
@@ -1513,12 +1597,21 @@ function buildCharts(){
     R.charts.push({cv,off,key});
   }
 }
+const SELCOL={A:"#38bdf8",B:"#fb923c",C:"#34d399"};
+const SELFILL={A:"rgba(56,189,248,0.22)",B:"rgba(251,146,60,0.22)",C:"rgba(52,211,153,0.22)"};
 function drawCharts(t){
   if(!R.charts)return;
   const d=devicePixelRatio||1;
   for(const ch of R.charts){
     const c=ch.cv.getContext("2d");
     c.drawImage(ch.off,0,0);
+    if(R.sel){
+      const W=ch.cv.width,H=ch.cv.height;
+      const x0=Math.min(R.sel.t0,R.sel.t1)/R.dur*W,x1=Math.max(R.sel.t0,R.sel.t1)/R.dur*W;
+      c.fillStyle=SELFILL[R.sel.P];c.fillRect(x0,0,x1-x0,H);
+      c.strokeStyle=SELCOL[R.sel.P];c.lineWidth=1.5*d;
+      c.beginPath();c.moveTo(x0,0);c.lineTo(x0,H);c.moveTo(x1,0);c.lineTo(x1,H);c.stroke();
+    }
     const x=t/R.dur*ch.cv.width;
     c.strokeStyle="#fbbf24";c.lineWidth=2*d;
     c.beginPath();c.moveTo(x,0);c.lineTo(x,ch.cv.height);c.stroke();
@@ -1727,15 +1820,40 @@ function seek(tms){
   else R.clock=tms;
   renderAt(tms);
 }
-let stripDrag=null;
+let stripDrag=null,selDrag=null;
+const stripT=(cv,e)=>{const r=cv.getBoundingClientRect();
+  return Math.max(0,Math.min(R.dur,(e.clientX-r.left)/r.width*R.dur));};
 [0,1,2].forEach(n=>$("strip"+n).addEventListener("pointerdown",e=>{
-  stripDrag=$("strip"+n);stripSeek(e);}));
-window.addEventListener("pointermove",e=>stripDrag&&stripSeek(e));
-window.addEventListener("pointerup",()=>stripDrag=null);
+  if(!R.data)return;
+  const cv=$("strip"+n),P=$("trimTgt").value;
+  if(P&&trimHasData(P)){                      // 範囲選択モード
+    e.preventDefault();
+    const t=stripT(cv,e);
+    selDrag={cv,P};R.sel={P,t0:t,t1:t};
+    drawCharts(R.lastT||0);
+  }else{stripDrag=cv;stripSeek(e);}           // 通常はタップした時刻へジャンプ
+}));
+window.addEventListener("pointermove",e=>{
+  if(selDrag){R.sel.t1=stripT(selDrag.cv,e);drawCharts(R.lastT||0);}
+  else if(stripDrag)stripSeek(e);
+});
+window.addEventListener("pointerup",()=>{
+  if(selDrag){
+    const P=selDrag.P,sel=R.sel;
+    selDrag=null;R.sel=null;
+    const a=Math.min(sel.t0,sel.t1),b=Math.max(sel.t0,sel.t1);
+    if(b-a<300)drawCharts(R.lastT||0);        // ほぼタップ → 選択とみなさない
+    else{
+      // グラフのX軸はAの時間軸。B/Cは「開始補正」ぶんずらして描かれている
+      const off=(P==="A"?0:(P==="B"?R.b.off:R.c.off))*1000,base=trimBase(P);
+      setTrimRange(P,base+a-off,base+b-off);
+    }
+  }
+  stripDrag=null;
+});
 function stripSeek(e){
   if(!R.data||!stripDrag)return;
-  const r=stripDrag.getBoundingClientRect();
-  seek((e.clientX-r.left)/r.width*R.dur);
+  seek(stripT(stripDrag,e));
 }
 $("btnPlay").addEventListener("click",()=>{
   if(!R.data)return;
