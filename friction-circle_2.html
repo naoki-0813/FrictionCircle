@@ -173,6 +173,11 @@
   #pasteBox textarea{width:100%;height:70px;background:var(--panel2);border:1px solid var(--line);
       color:var(--ink);border-radius:8px;padding:6px;font-size:11px;margin-top:6px}
   #saveCard{display:none}
+  /* 区間タイム(開始〜終了トリガ間) */
+  #lapBox{align-items:baseline;gap:8px;margin:2px 0 8px}
+  #lapBox .ll{font-size:11px;color:var(--ink3)}
+  #lapBox b{font-size:30px;color:var(--accent2);font-variant-numeric:tabular-nums;line-height:1.1}
+  #lapBox .lu{font-size:11px;color:var(--ink3)}
   dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:320px}
   dialog::backdrop{background:rgba(0,0,0,.6)}
 </style>
@@ -199,6 +204,7 @@
       <div class="use"><div class="l">摩擦円使用率</div><div class="v" id="mUseV">0</div><div class="u">%</div></div>
       <div><div class="l">前後G</div><div class="v" id="mLon">0.00</div><div class="u">+加速/-減速</div></div>
       <div><div class="l">横G</div><div class="v" id="mLat">0.00</div><div class="u">+右/-左</div></div>
+      <div><div class="l">縦G(1秒ピーク)</div><div class="v" id="mVrt">0.00</div><div class="u">+上/-下</div></div>
       <div><div class="l">ピーク</div><div class="v" id="mPeak">0.00</div><div class="u">G</div></div>
       <div><div class="l">記録時間</div><div class="v" id="mTime">0:00</div><div class="u">min:sec</div></div>
     </div>
@@ -215,6 +221,9 @@
     <button class="btn warn" id="btnRec">● 記録開始</button>
     <div class="card" id="saveCard">
       <h3>記録の保存</h3>
+      <div id="lapBox" style="display:none">
+        <span class="ll">区間タイム</span><b id="lapV">--</b>
+        <span class="lu" id="lapU"></span></div>
       <div class="frow"><span>記録名(任意)</span><input type="text" id="recName" placeholder="例: 筑波1本目" style="width:170px"></div>
       <div class="fileRow">
         <button class="btn pr" id="btnDlJson">データ(.json)を保存</button>
@@ -279,11 +288,11 @@
           <div class="u" id="slipV">スリップ --</div></div>
       </div>
       <div class="chartBox"><canvas id="strip0"></canvas>
-        <select class="chSel" id="chSel0"><option value="use">摩擦円使用率</option><option value="spd">速度</option><option value="lon">前後G</option><option value="lat">横G</option><option value="yaw">ヨーレート</option></select></div>
+        <select class="chSel" id="chSel0"><option value="use">摩擦円使用率</option><option value="spd">速度</option><option value="lon">前後G</option><option value="lat">横G</option><option value="vrt">縦G(段差)</option><option value="yaw">ヨーレート</option></select></div>
       <div class="chartBox"><canvas id="strip1"></canvas>
-        <select class="chSel" id="chSel1"><option value="use">摩擦円使用率</option><option value="spd">速度</option><option value="lon">前後G</option><option value="lat">横G</option><option value="yaw">ヨーレート</option></select></div>
+        <select class="chSel" id="chSel1"><option value="use">摩擦円使用率</option><option value="spd">速度</option><option value="lon">前後G</option><option value="lat">横G</option><option value="vrt">縦G(段差)</option><option value="yaw">ヨーレート</option></select></div>
       <div class="chartBox"><canvas id="strip2"></canvas>
-        <select class="chSel" id="chSel2"><option value="use">摩擦円使用率</option><option value="spd">速度</option><option value="lon">前後G</option><option value="lat">横G</option><option value="yaw">ヨーレート</option></select></div>
+        <select class="chSel" id="chSel2"><option value="use">摩擦円使用率</option><option value="spd">速度</option><option value="lon">前後G</option><option value="lat">横G</option><option value="vrt">縦G(段差)</option><option value="yaw">ヨーレート</option></select></div>
       <div class="ctrlRow">
         <button class="pb" id="btnPlay">▶ 再生</button>
         <span id="rpClock" style="font-variant-numeric:tabular-nums">0:00.0</span>
@@ -333,16 +342,21 @@
           <div class="ctrlRow">
             <span style="color:var(--ink3)">開始</span>
             <select id="rpTrigSt"><option value="manual">手動(先頭から)</option>
-              <option value="speed">速度で自動開始</option><option value="g">Gで自動開始</option></select>
+              <option value="speed">速度で自動開始</option><option value="g">Gで自動開始</option>
+              <option value="vert">縦G(段差)で自動開始</option></select>
             <label><input type="number" id="rpTrigStSpd" class="numS" min="3" step="1"> km/h以上</label>
             <label><input type="number" id="rpTrigStG" class="numS" min="0.1" max="1" step="0.05"> G以上</label>
+            <label><input type="number" id="rpTrigStVert" class="numS" min="0.1" max="3" step="0.05"> 縦G以上</label>
           </div>
           <div class="ctrlRow">
             <span style="color:var(--ink3)">終了</span>
             <select id="rpTrigEd"><option value="manual">手動(末尾まで)</option>
-              <option value="speed">速度低下で自動終了</option></select>
+              <option value="speed">速度低下で自動終了</option>
+              <option value="vert">縦G(段差)で自動終了</option></select>
             <label><input type="number" id="rpTrigEdSpd" class="numS" min="1" step="1"> km/h未満が</label>
             <label><input type="number" id="rpTrigEdSec" class="numS" min="2" step="1"> 秒続いたら</label>
+            <label><input type="number" id="rpTrigEdVert" class="numS" min="0.1" max="3" step="0.05"> 縦G以上</label>
+            <label>無効時間 <input type="number" id="rpTrigMinSec" class="numS" min="0" step="1"> 秒</label>
           </div>
           <div class="ctrlRow">
             <button class="tinyBtn pr" id="btnTrigCheck">判定する</button>
@@ -352,7 +366,9 @@
           </div>
           <div class="note" id="trigRes"></div>
           <div class="note">ここでの設定は「設定」タブの自動トリガと共通です。読み込んだ記録に条件を当てはめて、
-            どこで記録が始まり・終わるかを確認できます(判定は元データ全体に対して行います)。</div>
+            どこで記録が始まり・終わるかを確認できます(判定は元データ全体に対して行います)。
+            「縦G(段差)」はスタート/ゴールに置いた段差を乗り越えた瞬間で判定します。グラフの表示を「縦G(段差)」に
+            切り替えると、段差の山としきい値の関係を確認できます。終了トリガが手動以外なら区間タイムも出ます。</div>
         </div>
       </div>
       <div class="statsRow"><table class="statsTbl" id="statsTbl"></table></div>
@@ -380,15 +396,21 @@
         <span style="font-size:10px;color:var(--ink3)">1行に1つ(走行者名・メニュー等)</span></span>
         <textarea id="setRunList" placeholder="例:&#10;田中&#10;佐藤" style="width:150px;height:64px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px;font-size:13px"></textarea></div>
       <div class="frow"><span>開始トリガ</span><select id="setTrigSt">
-        <option value="manual">手動(ボタン)</option><option value="speed">速度で自動開始</option><option value="g">Gで自動開始</option></select></div>
+        <option value="manual">手動(ボタン)</option><option value="speed">速度で自動開始</option>
+        <option value="g">Gで自動開始</option><option value="vert">縦G(段差)で自動開始</option></select></div>
       <div class="frow"><span>開始する速度(km/h)以上</span><input type="number" id="setTrigStSpd" min="3" step="1"></div>
       <div class="frow"><span>開始するG以上</span><input type="number" id="setTrigStG" min="0.1" max="1" step="0.05"></div>
+      <div class="frow"><span>開始する縦G以上</span><input type="number" id="setTrigStVert" min="0.1" max="3" step="0.05"></div>
       <div class="frow"><span>終了トリガ</span><select id="setTrigEd">
-        <option value="manual">手動(ボタン)</option><option value="speed">速度低下で自動終了</option></select></div>
+        <option value="manual">手動(ボタン)</option><option value="speed">速度低下で自動終了</option>
+        <option value="vert">縦G(段差)で自動終了</option></select></div>
       <div class="frow"><span>終了する速度(km/h)未満</span><input type="number" id="setTrigEdSpd" min="1" step="1"></div>
       <div class="frow"><span>低速の継続時間(秒)</span><input type="number" id="setTrigEdSec" min="2" step="1"></div>
+      <div class="frow"><span>終了する縦G以上</span><input type="number" id="setTrigEdVert" min="0.1" max="3" step="0.05"></div>
+      <div class="frow"><span>終了トリガの無効時間(秒)</span><input type="number" id="setTrigMinSec" min="0" step="1"></div>
       <div class="frow"><span>連続走行モード(終了後に次の待機へ)</span><input type="checkbox" id="setRearm" style="width:20px;height:20px"></div>
-      <div class="note">リストに登録しておくと、記録開始ボタンを押した時に「どの走行か」を大きなボタンで選べます(交代で走る場合に便利)。本数は内容ごとに自動でカウントされ、選択画面の−/＋で調整もできます。記録名は「走行内容_◯本目」で自動生成されます。開始トリガを「速度」「G」にすると、選択後にキャリブレーション→待機となり、走り出すと自動で記録が始まります。</div>
+      <div class="note">リストに登録しておくと、記録開始ボタンを押した時に「どの走行か」を大きなボタンで選べます(交代で走る場合に便利)。本数は内容ごとに自動でカウントされ、選択画面の−/＋で調整もできます。記録名は「走行内容_◯本目」で自動生成されます。開始トリガを「速度」「G」「縦G」にすると、選択後にキャリブレーション→待機となり、走り出すと自動で記録が始まります。<br>
+        <b>縦G(段差)トリガ</b>: スタート地点とゴール地点に小さな段差を置き、乗り越えた瞬間の上下方向のGで開始/終了します。終了トリガが手動以外のときは、開始〜終了の区間タイムが走行後に表示され、記録名の末尾にも自動で入ります。段差以外の路面の凹凸で誤作動しないよう、しきい値は記録タブの「縦G(1秒ピーク)」を見ながら決めてください。「終了トリガの無効時間」の間は終了判定を行いません(スタートの段差で即終了するのを防ぎます)。</div>
     </div>
     <div class="card">
       <h3>センサー・カメラ・GPS</h3>
@@ -434,7 +456,7 @@ const G0=9.80665;
 const set={carName:"マイカー",carMaxG:1.05,rate:25,flip:false,flipLon:false,useCam:true,demo:false,
   smooth:30,calib:null /* {f0:{x,y,z}} */,
   run:{list:[],counts:{},content:"",no:1},
-  trig:{start:"manual",startSpd:15,startG:0.30,stop:"manual",stopSpd:8,stopSec:10,rearm:false},
+  trig:{start:"manual",startSpd:15,startG:0.30,startVert:0.35,stop:"manual",stopSpd:8,stopSec:10,stopVert:0.35,minSec:5,rearm:false},
   charts:["use","spd","lon"]};
 function loadSet(){try{const s=JSON.parse(localStorage.getItem("fcset"));if(s)Object.assign(set,s);}catch(e){}
   set.demo=false;/* デモモードは常にOFFで起動 */
@@ -444,7 +466,7 @@ function loadSet(){try{const s=JSON.parse(localStorage.getItem("fcset"));if(s)Ob
   /* 旧形式(単一の走行内容)からの移行 */
   if(set.run.content&&!set.run.list.length){
     set.run.list=[set.run.content];set.run.counts[set.run.content]=set.run.no||1;}
-  set.trig=Object.assign({start:"manual",startSpd:15,startG:0.30,stop:"manual",stopSpd:8,stopSec:10,rearm:false},set.trig||{});
+  set.trig=Object.assign({start:"manual",startSpd:15,startG:0.30,startVert:0.35,stop:"manual",stopSpd:8,stopSec:10,stopVert:0.35,minSec:5,rearm:false},set.trig||{});
   if(!Array.isArray(set.charts)||set.charts.length<3)set.charts=["use","spd","lon"];}
 function saveSet(){try{localStorage.setItem("fcset",JSON.stringify(set));}catch(e){}}
 function scaleG(){return set.carMaxG*1.2;}
@@ -461,6 +483,8 @@ function refreshSetUI(){
   $("setTrigSt").value=set.trig.start; $("setTrigStSpd").value=set.trig.startSpd;
   $("setTrigStG").value=set.trig.startG; $("setTrigEd").value=set.trig.stop;
   $("setTrigEdSpd").value=set.trig.stopSpd; $("setTrigEdSec").value=set.trig.stopSec;
+  $("setTrigStVert").value=set.trig.startVert; $("setTrigEdVert").value=set.trig.stopVert;
+  $("setTrigMinSec").value=set.trig.minSec;
   $("setRearm").checked=set.trig.rearm;
   syncTrigUI();
   updateCamTgl();
@@ -475,15 +499,32 @@ function syncTrigUI(){
   rt.value=set.trig.start; $("rpTrigStSpd").value=set.trig.startSpd;
   $("rpTrigStG").value=set.trig.startG; $("rpTrigEd").value=set.trig.stop;
   $("rpTrigEdSpd").value=set.trig.stopSpd; $("rpTrigEdSec").value=set.trig.stopSec;
+  $("rpTrigStVert").value=set.trig.startVert; $("rpTrigEdVert").value=set.trig.stopVert;
+  $("rpTrigMinSec").value=set.trig.minSec;
   evalTrig();
 }
 function runLabel(){return(set.run.content?set.run.content+" ":"")+set.run.no+"本目";}
+/* トリガ条件の文言(設定タブ・待機画面・再生タブで共通) */
+function trigStartTxt(){
+  return set.trig.start==="speed"?set.trig.startSpd+"km/h以上":
+         set.trig.start==="vert"?"縦G "+(+set.trig.startVert).toFixed(2)+"G以上":
+         (+set.trig.startG).toFixed(2)+"G以上";
+}
+function trigStopTxt(){
+  return set.trig.stop==="speed"?set.trig.stopSpd+"km/h未満が"+set.trig.stopSec+"秒":
+         set.trig.stop==="vert"?"縦G "+(+set.trig.stopVert).toFixed(2)+"G以上":"手動";
+}
+/* 区間タイム: 表示用(1:23.45) / ファイル名用(1m23.45s) */
+function lapText(ms){const t=Math.max(0,ms)/1000,m=Math.floor(t/60),r=t-m*60;
+  return m+":"+(r<10?"0":"")+r.toFixed(2);}
+function lapFile(ms){const t=Math.max(0,ms)/1000,m=Math.floor(t/60),r=t-m*60;
+  return m?m+"m"+(r<10?"0":"")+r.toFixed(2)+"s":r.toFixed(2)+"s";}
 function updateRunInfo(){
   const a=[];
   if((set.run.list||[]).length>=2)a.push("開始時に走行を選択("+set.run.list.length+"件)");
   else a.push("次の記録: "+runLabel());
-  if(set.trig.start!=="manual")a.push("自動開始("+(set.trig.start==="speed"?set.trig.startSpd+"km/h":set.trig.startG.toFixed(2)+"G")+")");
-  if(set.trig.stop==="speed")a.push("自動終了("+set.trig.stopSpd+"km/h未満 "+set.trig.stopSec+"秒)");
+  if(set.trig.start!=="manual")a.push("自動開始("+trigStartTxt()+")");
+  if(set.trig.stop!=="manual")a.push("自動終了("+trigStopTxt()+")");
   if(set.trig.rearm)a.push("連続走行");
   $("runInfo").textContent=a.join(" / ");
 }
@@ -532,6 +573,9 @@ $("setTrigStG").addEventListener("change",e=>{set.trig.startG=Math.min(1,Math.ma
 $("setTrigEd").addEventListener("change",e=>{set.trig.stop=e.target.value;saveSet();updateRunInfo();syncTrigUI();});
 $("setTrigEdSpd").addEventListener("change",e=>{set.trig.stopSpd=Math.max(1,parseFloat(e.target.value)||8);saveSet();updateRunInfo();syncTrigUI();});
 $("setTrigEdSec").addEventListener("change",e=>{set.trig.stopSec=Math.max(2,parseInt(e.target.value)||10);saveSet();updateRunInfo();syncTrigUI();});
+$("setTrigStVert").addEventListener("change",e=>{set.trig.startVert=Math.min(3,Math.max(0.1,parseFloat(e.target.value)||0.35));saveSet();updateRunInfo();syncTrigUI();});
+$("setTrigEdVert").addEventListener("change",e=>{set.trig.stopVert=Math.min(3,Math.max(0.1,parseFloat(e.target.value)||0.35));saveSet();updateRunInfo();syncTrigUI();});
+$("setTrigMinSec").addEventListener("change",e=>{set.trig.minSec=Math.max(0,parseInt(e.target.value)||0);saveSet();updateRunInfo();syncTrigUI();});
 $("setRearm").addEventListener("change",e=>{set.trig.rearm=e.target.checked;saveSet();updateRunInfo();});
 function updateStat(){
   const s=[];
@@ -708,7 +752,7 @@ function buildBasis(){
         y:fwd3.z*uV.x-fwd3.x*uV.z,
         z:fwd3.x*uV.y-fwd3.y*uV.x};
 }
-function vehicleG(f){ // 正規化済みセンサー値 -> [横G, 前後G]
+function vehicleG(f){ // 正規化済みセンサー値 -> [横G, 前後G, 縦G]
   if(!f0||!fwd3||f.x==null)return null;
   const hx=f.x-f0.x,hy=f.y-f0.y,hz=f.z-f0.z;
   const dp=hx*uV.x+hy*uV.y+hz*uV.z;
@@ -717,7 +761,7 @@ function vehicleG(f){ // 正規化済みセンサー値 -> [横G, 前後G]
   let lat=(px*rgt3.x+py*rgt3.y+pz*rgt3.z)/G0;
   if(set.flip)lat=-lat;
   if(set.flipLon)lon=-lon;
-  return[lat,lon];
+  return[lat,lon,dp/G0];   // 縦G: 重力軸方向(+が上向き)。段差・うねりの検出用
 }
 const nf=f=>({x:AXSIGN*f.x,y:AXSIGN*f.y,z:AXSIGN*f.z});
 
@@ -839,7 +883,11 @@ function demoStepper(ph){
       const dsl=(sl-pv)/dt;pv=sl;
       const yaw=la*G0/v*180/Math.PI+dsl;
       const course=((hdg*180/Math.PI)%360+360)%360;
-      return{g:[la,lo],lat,lon,spd:v*3.6,t,yaw,course};
+      // 縦G: 路面のうねり + 25秒ごとの段差(スタート/ゴールの段差を模擬)
+      const bp=u%25;
+      const vg=0.05*Math.sin(u*9.1)+0.03*Math.sin(u*17.3)+
+        (bp<0.12?0.55*Math.sin(bp/0.12*Math.PI):0);
+      return{g:[la,lo,vg],lat,lon,spd:v*3.6,t,yaw,course};
     }
   };
 }
@@ -847,7 +895,7 @@ function genDemoJson(sec,ph){
   const st=demoStepper(ph),rate=25,samples=[],gps=[];
   for(let i=0;i<sec*rate;i++){
     const s=st.step(1/rate);
-    samples.push([Math.round(s.t*1000),+s.g[0].toFixed(3),+s.g[1].toFixed(3),+s.yaw.toFixed(1)]);
+    samples.push([Math.round(s.t*1000),+s.g[0].toFixed(3),+s.g[1].toFixed(3),+s.yaw.toFixed(1),+s.g[2].toFixed(3)]);
     if(i%rate===0)gps.push([Math.round(s.t*1000),+s.lat.toFixed(6),+s.lon.toFixed(6),
       +s.spd.toFixed(1),Math.round(s.course)]);
   }
@@ -857,7 +905,7 @@ function genDemoJson(sec,ph){
 
 /* ================= 記録 ================= */
 const rec={on:false,standby:false,t0:0,samples:[],gps:[],peak:0,mr:null,chunks:[],videoBlob:null,videoExt:"webm",
-           jsonBlob:null,timer:null,stbyTimer:null,demo:null,wake:null};
+           jsonBlob:null,timer:null,stbyTimer:null,demo:null,wake:null,lapMs:null,vHist:[]};
 $("btnRec").addEventListener("click",()=>{
   if(rec.on)stopRec();
   else if(rec.standby)cancelStandby();
@@ -899,9 +947,7 @@ function enterStandby(){
   rec.standby=true;
   const b=$("btnRec");
   b.classList.remove("warn");b.classList.add("stby");
-  b.textContent=set.trig.start==="speed"?
-    "待機中: "+set.trig.startSpd+"km/h以上で自動開始 (タップで中止)":
-    "待機中: "+set.trig.startG.toFixed(2)+"G以上で自動開始 (タップで中止)";
+  b.textContent="待機中: "+trigStartTxt()+"で自動開始 (タップで中止)";
   $("calWarn").textContent="待機中です。走り出すと自動で記録が始まります。";
   startGpsWatch();
   try{navigator.wakeLock&&navigator.wakeLock.request("screen").then(w=>rec.wake=w).catch(()=>{});}catch(e){}
@@ -910,6 +956,8 @@ function enterStandby(){
     let go=false;
     if(set.trig.start==="speed")
       go=lastGps&&lastGps.spd!=null&&performance.now()-lastGps.t<3000&&lastGps.spd>=set.trig.startSpd;
+    else if(set.trig.start==="vert")
+      go=latestG&&latestG[2]!=null&&Math.abs(latestG[2])>=set.trig.startVert;
     else if(latestG)
       go=Math.hypot(latestG[0],latestG[1])>=set.trig.startG;
     if(go){rec.standby=false;clearInterval(rec.stbyTimer);beginCapture();}
@@ -924,7 +972,7 @@ function cancelStandby(){
 async function beginCapture(){
   rec.on=true;rec.samples=[];rec.gps=[];rec.peak=0;rec.chunks=[];
   rec.startedAt=new Date().toISOString();
-  rec.stopArmed=false;rec.lowT=null;
+  rec.stopArmed=false;rec.lowT=null;rec.lapMs=null;rec.vHist=[];
   rec.videoBlob=null;rec.jsonObj=null;
   rec.t0=performance.now();
   rec.demo=set.demo?demoStepper():null;
@@ -964,6 +1012,9 @@ async function beginCapture(){
         rec.gps.push([Math.round(t),+s.lat.toFixed(6),+s.lon.toFixed(6),
           +s.spd.toFixed(1),Math.round(s.course)]);
     }
+    // 自動終了(縦G): ゴール地点の段差を越えたら停止。無効時間の間は判定しない
+    if(set.trig.stop==="vert"&&g&&g[2]!=null&&t>=set.trig.minSec*1000
+       &&Math.abs(g[2])>=set.trig.stopVert){rec.lapMs=t;stopRec();return;}
     // 自動終了: 一度しっかり走った後、低速が指定秒続いたら停止
     if(set.trig.stop==="speed"){
       const fresh=lastGps&&lastGps.spd!=null&&performance.now()-lastGps.t<3000;
@@ -972,14 +1023,15 @@ async function beginCapture(){
         if(rec.stopArmed){
           if(lastGps.spd<set.trig.stopSpd){
             if(rec.lowT==null)rec.lowT=t;
-            else if(t-rec.lowT>=set.trig.stopSec*1000){stopRec();return;}
+            else if(t-rec.lowT>=set.trig.stopSec*1000){rec.lapMs=rec.lowT;stopRec();return;}
           }else rec.lowT=null;
         }
       }
     }
     if(!g)return;
     const p=[+g[0].toFixed(3),+g[1].toFixed(3)];
-    rec.samples.push([Math.round(t),p[0],p[1],yw!=null?+yw.toFixed(1):0]); // 変換済み(フィルタ前)
+    const vg=(g[2]!=null)?+g[2].toFixed(3):0;
+    rec.samples.push([Math.round(t),p[0],p[1],yw!=null?+yw.toFixed(1):0,vg]); // 変換済み(フィルタ前)
     if(!rec.demo&&lastRawEv&&lastRawEv.ax!=null) // 端末センサーの生値(変換前)
       rec.raw.push([Math.round(t),
         +lastRawEv.ax.toFixed(3),+lastRawEv.ay.toFixed(3),+lastRawEv.az.toFixed(3),
@@ -996,9 +1048,13 @@ function stopRec(){
   rec.on=false;clearInterval(rec.timer);
   $("recBadge").style.display="none";updateCamTgl();
   if(rec.wake){rec.wake.release().catch(()=>{});rec.wake=null;}
-  // 走行登録から記録名を自動生成し、本数を進める
-  const autoName=runLabel().replace(/\s+/g,"_");
+  // 走行登録から記録名を自動生成(区間タイムがあれば末尾に付ける)、本数を進める
+  const lap=(set.trig.stop!=="manual"&&rec.lapMs!=null&&rec.lapMs>0)?rec.lapMs:null;
+  const autoName=runLabel().replace(/\s+/g,"_")+(lap!=null?"_"+lapFile(lap):"");
   $("recName").value=autoName;
+  $("lapBox").style.display=lap!=null?"flex":"none";
+  if(lap!=null){$("lapV").textContent=lapText(lap);
+    $("lapU").textContent=set.trig.start==="manual"?"(記録開始〜終了トリガ)":"(開始トリガ〜終了トリガ)";}
   const thisRun={content:set.run.content,no:set.run.no};
   set.run.counts[set.run.content||""]=set.run.no+1; // 内容ごとに本数をカウント
   set.run.no++;saveSet();updateRunInfo();
@@ -1007,6 +1063,8 @@ function stopRec(){
     rec.jsonObj={app:"friction-circle-recorder",version:1,date:new Date().toISOString(),
       car:{name:set.carName,maxG:set.carMaxG},rate:set.rate,samples:rec.samples,gps:rec.gps};
     rec.jsonObj.name=autoName;
+    rec.jsonObj.samplesFormat="[t_ms, 横G, 前後G, ヨーレートdps(+右回り), 縦G(+上)]";
+    if(lap!=null)rec.jsonObj.lap=Math.round(lap);
     rec.jsonObj.startedAt=rec.startedAt;
     rec.jsonObj.run=thisRun;
     if(rec.videoLag!=null)rec.jsonObj.videoLag=+rec.videoLag.toFixed(2);
@@ -1203,6 +1261,16 @@ function recLoop(){
   ggRec.redraw();
   $("mSpd").textContent=(lastGps&&lastGps.spd!=null&&performance.now()-lastGps.t<5000)?
       Math.round(lastGps.spd):"--";
+  // 縦G: 段差トリガのしきい値を決めやすいよう直近1秒のピークを表示
+  if(latestG&&latestG[2]!=null){
+    rec.vHist.push([now,latestG[2]]);
+    while(rec.vHist.length&&now-rec.vHist[0][0]>1000)rec.vHist.shift();
+    let vp=0;for(const v of rec.vHist)if(Math.abs(v[1])>Math.abs(vp))vp=v[1];
+    const ev=$("mVrt");ev.textContent=(vp>=0?"+":"")+vp.toFixed(2);
+    const th=set.trig.start==="vert"?set.trig.startVert:
+             set.trig.stop==="vert"?set.trig.stopVert:null;
+    ev.style.color=(th!=null&&Math.abs(vp)>=th)?"var(--max)":"";
+  }
   $("mPeak").textContent=rec.peak.toFixed(2);
   $("mTime").textContent=rec.on?fmtT(performance.now()-rec.t0):"0:00";
 }
@@ -1248,7 +1316,7 @@ $("btnCsv").addEventListener("click",()=>{
   if(R.b.data)sets.push({p:"B",nm:R.b.file,d:R.b.data,off:R.b.off});
   if(R.c.data)sets.push({p:"C",nm:R.c.file,d:R.c.data,off:R.c.off});
   const anyRaw=sets.some(st=>st.d.raw&&st.d.raw.samples&&st.d.raw.samples.length);
-  const head=["データ","ファイル名","t_s","同期t_s","横G","前後G","横G_平滑","前後G_平滑",
+  const head=["データ","ファイル名","t_s","同期t_s","横G","前後G","縦G","横G_平滑","前後G_平滑",
     "ヨーレートdps","速度kmh","緯度","経度"];
   if(anyRaw)head.push("生accX","生accY","生accZ","生rotX","生rotY","生rotZ");
   const rows=[head.join(",")];
@@ -1256,8 +1324,9 @@ $("btnCsv").addEventListener("click",()=>{
     const S=st.d.samples,SM=st.d.S||null,rawS=(st.d.raw&&st.d.raw.samples)||null;
     for(let i=0;i<S.length;i++){
       const s=S[i],p=posOf(st.d.gps,s[0])||{},sm=SM?SM[Math.min(i,SM.length-1)]:null;
+      const z=vrtOf(s);
       const c=[st.p,csvQ(st.nm),(s[0]/1000).toFixed(2),((s[0]+st.off*1000)/1000).toFixed(2),
-        s[1],s[2],
+        s[1],s[2],(z!=null?z:""),
         sm?sm[1].toFixed(3):"",sm?sm[2].toFixed(3):"",
         (s[3]!=null?s[3]:""),(p.spd!=null?p.spd.toFixed(1):""),
         (p.lat!=null?p.lat.toFixed(6):""),(p.lon!=null?p.lon.toFixed(6):"")];
@@ -1484,12 +1553,15 @@ $("trimTgt").addEventListener("change",e=>{
   setSelMode(!!$("trimTgt").value);
 });
 /* ---- 自動トリガの確認: 記録側と同じ条件を、読み込んだ元データに当てはめる ---- */
+const vrtOf=v=>(v.length>4&&v[4]!=null)?v[4]:null;
+const hasVrt=S=>!!(S&&S.length&&S[0].length>4);
 function trigOf(orig){
   const S=orig&&orig.samples;
   if(!S||!S.length)return null;
   const g=orig.gps||[];
   const spdAt=t=>{const p=posOf(g,t);return(p&&p.spd!=null)?p.spd:null;};
   const end=S[S.length-1][0];
+  const vert=hasVrt(S);
   let st=0;
   if(set.trig.start==="speed"){
     st=null;
@@ -1497,8 +1569,19 @@ function trigOf(orig){
   }else if(set.trig.start==="g"){
     st=null;
     for(const v of S){if(Math.hypot(v[1],v[2])>=set.trig.startG){st=v[0];break;}}
+  }else if(set.trig.start==="vert"){
+    st=null;
+    for(const v of S){const z=vrtOf(v);if(z!=null&&Math.abs(z)>=set.trig.startVert){st=v[0];break;}}
   }
-  let ed=end;
+  let ed=end,edFired=false;
+  if(st!=null&&set.trig.stop==="vert"){
+    // 無効時間の後、最初にしきい値を超えた縦G(=ゴールの段差)で終了
+    for(const v of S){
+      if(v[0]<st+set.trig.minSec*1000)continue;
+      const z=vrtOf(v);
+      if(z!=null&&Math.abs(z)>=set.trig.stopVert){ed=v[0];edFired=true;break;}
+    }
+  }
   if(st!=null&&set.trig.stop==="speed"){
     // 記録側と同じ: 一度しっかり走った(armSpd以上)後、低速が指定秒続いたら終了
     const armSpd=Math.max(set.trig.stopSpd+5,set.trig.startSpd);
@@ -1513,9 +1596,10 @@ function trigOf(orig){
         else if(v[0]-lowT>=set.trig.stopSec*1000){ed=v[0];break;}
       }else lowT=null;
     }
+    edFired=ed!=null;
     if(ed==null)ed=end;
   }
-  return{st,ed,end};
+  return{st,ed,end,edFired,vert};
 }
 function evalTrig(){
   const box=$("trigRes");if(!box)return;
@@ -1526,10 +1610,18 @@ function evalTrig(){
     if(!o||!trimHasData(p))continue;
     const r=trigOf(o);if(!r)continue;
     out[p]=r;
-    txt.push(p+" "+(p==="A"?R.file:(p==="B"?R.b.file:R.c.file))+": "+
-      (r.st==null?"開始条件に達しませんでした":
-        "開始 "+fmtMSf(r.st)+" → 終了 "+fmtMSf(r.ed)+
-        " (走行 "+((r.ed-r.st)/1000).toFixed(1)+"秒 / 全体 "+fmtMSf(r.end)+")"));
+    const nm=p==="A"?R.file:(p==="B"?R.b.file:R.c.file);
+    const needV=set.trig.start==="vert"||set.trig.stop==="vert";
+    let line;
+    if(needV&&!r.vert)line="このデータには縦Gが記録されていません(旧バージョンの記録)";
+    else if(r.st==null)line="開始条件に達しませんでした";
+    else{
+      line="開始 "+fmtMSf(r.st)+" → 終了 "+fmtMSf(r.ed)+" / 全体 "+fmtMSf(r.end);
+      if(set.trig.stop!=="manual")
+        line+=(r.edFired?" ─ 区間タイム "+lapText(r.ed-r.st):
+               " ─ 終了条件に達せず(末尾まで "+lapText(r.ed-r.st)+")");
+    }
+    txt.push(p+" "+nm+": "+line);
   }
   R.trig=out;
   box.innerHTML=txt.map(escH).join("<br>");
@@ -1563,6 +1655,12 @@ $("rpTrigEdSpd").addEventListener("change",e=>{
   set.trig.stopSpd=Math.max(1,parseFloat(e.target.value)||8);trigSync();});
 $("rpTrigEdSec").addEventListener("change",e=>{
   set.trig.stopSec=Math.max(2,parseInt(e.target.value)||10);trigSync();});
+$("rpTrigStVert").addEventListener("change",e=>{
+  set.trig.startVert=Math.min(3,Math.max(0.1,parseFloat(e.target.value)||0.35));trigSync();});
+$("rpTrigEdVert").addEventListener("change",e=>{
+  set.trig.stopVert=Math.min(3,Math.max(0.1,parseFloat(e.target.value)||0.35));trigSync();});
+$("rpTrigMinSec").addEventListener("change",e=>{
+  set.trig.minSec=Math.max(0,parseInt(e.target.value)||0);trigSync();});
 $("btnTrigCheck").addEventListener("click",evalTrig);
 $("btnTrigApply").addEventListener("click",applyTrig);
 $("rpTrigMark").addEventListener("change",()=>drawCharts(R.lastT||0));
@@ -1602,7 +1700,8 @@ function loadData(j,fname){
   $("rpBody").style.display="block";
   $("rpInfo").textContent="ファイル: "+R.file+" ─ "+(j.name?j.name+" / ":"")+(j.car?j.car.name+" / ":"")+
     (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
-    "─ "+(R.dur/1000).toFixed(0)+"秒 / GPS点 "+(j.gps?j.gps.length:0);
+    "─ "+(R.dur/1000).toFixed(0)+"秒 / GPS点 "+(j.gps?j.gps.length:0)+
+    (typeof j.lap==="number"?" / 記録時の区間タイム "+lapText(j.lap):"");
   R.offset=(typeof j.videoLag==="number")?Math.max(-3,Math.min(3,j.videoLag)):0;
   $("rpOfs").value=R.offset;$("rpOfsV").textContent=R.offset.toFixed(1);
   R.sm=(typeof j.smooth==="number")?j.smooth:set.smooth;
@@ -1620,15 +1719,19 @@ function updStats(){
   const rows=[{p:"A",nm:R.file,col:"var(--accent)",d:R.data,maxG:set.carMaxG}];
   if(R.b.data)rows.push({p:"B",nm:R.b.file,col:"#fb923c",d:R.b.data,maxG:R.b.maxG});
   if(R.c.data)rows.push({p:"C",nm:R.c.file,col:"#34d399",d:R.c.data,maxG:R.c.maxG});
-  let h="<tr><th>データ</th><th>時間</th><th>最大G</th><th>平均使用率</th><th>90%超</th></tr>";
+  let h="<tr><th>データ</th><th>時間</th><th>最大G</th><th>最大縦G</th><th>平均使用率</th><th>90%超</th></tr>";
   for(const r of rows){
     const S=r.d.S||r.d.samples;
     let mx=0,sum=0,hi=0;
     for(const s of S){const g=Math.hypot(s[1],s[2]);if(g>mx)mx=g;sum+=g;
       if(g/r.maxG>=0.9)hi++;}
+    let vp=null;                       // 縦Gは平滑化しないので生サンプルから
+    for(const s of r.d.samples){const z=vrtOf(s);
+      if(z!=null&&(vp==null||Math.abs(z)>Math.abs(vp)))vp=z;}
     h+="<tr><td class='nm' style='color:"+r.col+"'>"+escH(r.p+" "+(r.nm||"(ファイル名なし)"))+"</td>"+
        "<td>"+fmtMS(S[S.length-1][0])+"</td>"+
        "<td>"+mx.toFixed(2)+"G</td>"+
+       "<td>"+(vp!=null?(vp>=0?"+":"")+vp.toFixed(2)+"G":"-")+"</td>"+
        "<td>"+Math.round(sum/S.length/r.maxG*100)+"%</td>"+
        "<td>"+Math.round(hi/(r.d.rate||25))+"s</td></tr>";
   }
@@ -1677,12 +1780,14 @@ const CHDEF={
   spd:{label:"速度 km/h"},
   lon:{label:"前後G (+加速/-減速)"},
   lat:{label:"横G (+右/-左)"},
+  vrt:{label:"縦G (+上/-下・段差)"},
   yaw:{label:"ヨーレート °/s (+右回り)"}
 };
 function chVal(slot,key,t,isA){
   const d=slot.data;
   if(key==="spd"){const p=posOf(d.gps,t);return(p&&p.spd!=null)?p.spd:null;}
   if(key==="yaw"){const s=d.samples[idxAt(d.samples,t)];return s.length>3?s[3]:null;}
+  if(key==="vrt"){const s=d.samples[idxAt(d.samples,t)];return vrtOf(s);}
   const S=d.S||d.samples,s=S[idxAt(S,t)];
   if(key==="use")return Math.hypot(s[1],s[2])/(isA?set.carMaxG:slot.maxG)*100;
   if(key==="lat")return s[1];
@@ -1698,12 +1803,12 @@ function chRange(key){
     return{min:0,max:Math.max(20,Math.ceil(mx/20)*20),zero:false};
   }
   let mx=0;
-  const ix=key==="lat"?1:key==="lon"?2:3;
+  const ix=key==="lat"?1:key==="lon"?2:key==="vrt"?4:3;
   for(const s of slots){
-    const A=key==="yaw"?s.d.samples:(s.d.S||s.d.samples);
+    const A=(key==="yaw"||key==="vrt")?s.d.samples:(s.d.S||s.d.samples);
     for(const v of A){const x=Math.abs(v[ix]||0);if(x>mx)mx=x;}
   }
-  const step=key==="yaw"?10:0.5;
+  const step=key==="yaw"?10:key==="vrt"?0.25:0.5;
   const m=Math.max(step,Math.ceil(mx/step)*step);
   return{min:-m,max:m,zero:true};
 }
@@ -1763,6 +1868,17 @@ function buildCharts(){
     if(key==="use"){
       c.strokeStyle="#f43f5e";c.setLineDash([4*d,4*d]);c.lineWidth=1*d;
       c.beginPath();c.moveTo(0,yOf(100));c.lineTo(W,yOf(100));c.stroke();c.setLineDash([]);
+    }
+    if(key==="vrt"){   // 段差トリガのしきい値(±)を目安線として表示
+      const th=[];
+      if(set.trig.start==="vert")th.push(set.trig.startVert);
+      if(set.trig.stop==="vert")th.push(set.trig.stopVert);
+      c.strokeStyle="#f43f5e";c.setLineDash([4*d,4*d]);c.lineWidth=1*d;
+      for(const v of th){
+        c.beginPath();c.moveTo(0,yOf(v));c.lineTo(W,yOf(v));
+        c.moveTo(0,yOf(-v));c.lineTo(W,yOf(-v));c.stroke();
+      }
+      c.setLineDash([]);
     }
     c.fillStyle="#8a98a8";c.font=(9*d)+"px sans-serif";
     const sc=rg.zero?"±"+rg.max:rg.min+"〜"+rg.max;
