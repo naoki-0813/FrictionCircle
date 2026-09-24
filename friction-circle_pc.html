@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>摩擦円ビューアー (PC)</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b23; --panel2:#1d242f; --line:#2a3342;
+    --ink:#e8ecf1; --ink2:#9aa7b8; --ink3:#5f6c7d;
+    --accent:#38bdf8; --accent2:#fbbf24; --ok:#34d399; --max:#f43f5e;
+    --railw:340px; --mapw:38%;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);overflow:hidden;
+    font:13px/1.55 "Yu Gothic UI","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+    display:flex;flex-direction:column}
+  button{font-family:inherit}
+  /* ---------- ヘッダ ---------- */
+  header{flex:none;display:flex;align-items:center;gap:16px;padding:7px 14px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header .t{font-size:15px;font-weight:700;white-space:nowrap}
+  header .t span{font-size:11px;color:var(--ink3);font-weight:600;margin-left:6px}
+  header label{display:flex;align-items:center;gap:5px;color:var(--ink2);white-space:nowrap}
+  header .sp{flex:1}
+  input[type=number],input[type=text]{background:var(--panel2);border:1px solid var(--line);
+    color:var(--ink);border-radius:6px;padding:3px 6px;font-size:13px;font-family:inherit}
+  input[type=range]{accent-color:var(--accent)}
+  select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:6px;padding:3px 6px;font-size:12px;font-family:inherit}
+  input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent)}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.pr{background:var(--accent);color:#04222f;border-color:var(--accent);font-weight:700}
+  .btn.pr:hover{color:#04222f;filter:brightness(1.1)}
+  .btn:disabled{opacity:.4;cursor:default}
+  .btn.sm{padding:3px 8px;font-size:11px}
+  /* ---------- レイアウト ---------- */
+  #layout{flex:1;display:grid;grid-template-columns:var(--railw) 6px minmax(0,1fr);min-height:0}
+  .grip{background:var(--line);cursor:col-resize;position:relative}
+  .grip:hover,.grip.drag{background:var(--accent)}
+  #rail{overflow-y:auto;padding:8px;min-width:0}
+  #main{display:grid;grid-template-columns:minmax(0,1fr) 6px var(--mapw);min-width:0;min-height:0}
+  #leftPane{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0;min-height:0}
+  /* 画面が狭いPC/ノート向けの調整(基本は1400px以上のモニタを想定) */
+  @media (max-width:1400px){:root{--railw:296px;--mapw:34%}}
+  @media (max-width:1150px){
+    #main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) 6px 300px}
+    #gripB{pointer-events:none;cursor:default}
+    #mapPane{border-left:none;border-top:1px solid var(--line)}
+  }
+  body.mapmax #rail,body.mapmax #gripA,body.mapmax #leftPane,body.mapmax #gripB{display:none}
+  body.mapmax #main{grid-template-rows:minmax(0,1fr)}
+  body.mapmax #layout{grid-template-columns:minmax(0,1fr)}
+  body.mapmax #main{grid-template-columns:minmax(0,1fr)}
+  /* ---------- カード(左レール) ---------- */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:9px 10px;margin-bottom:8px}
+  .card h3{font-size:12px;color:var(--accent);font-weight:700;margin-bottom:7px;
+    display:flex;justify-content:space-between;align-items:center;gap:6px}
+  .card h3 .sub{color:var(--ink3);font-weight:600;font-size:10px}
+  .note{font-size:11px;color:var(--ink3);line-height:1.65}
+  .rowBtns{display:flex;gap:6px;margin-top:7px}
+  .rowBtns .btn{flex:1;text-align:center}
+  /* ---------- ファイルスロット ---------- */
+  .slot{border:1px solid var(--line);border-radius:9px;padding:6px 7px;margin-bottom:6px;
+    background:var(--panel2)}
+  .slot.empty{opacity:.62}
+  .sHead{display:flex;align-items:center;gap:6px}
+  .sHead .dot{width:11px;height:11px;border-radius:50%;flex:none}
+  .sHead .k{font-weight:700;font-size:12px;flex:none;width:12px}
+  .sHead .nm{flex:1;min-width:0;font-size:12px;font-weight:700;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sHead .x{background:none;border:none;color:var(--ink3);cursor:pointer;font-size:14px;padding:0 3px}
+  .sHead .x:hover{color:var(--max)}
+  .sMeta{font-size:10.5px;color:var(--ink3);margin:2px 0 4px;line-height:1.5}
+  .sCtl{display:none;flex-direction:column;gap:3px;font-size:10.5px;color:var(--ink2)}
+  .slot.has .sCtl{display:flex}
+  .slot.has .open{display:none}
+  .sCtl label{display:flex;align-items:center;gap:4px}
+  .sCtl input[type=range]{flex:1;min-width:0;height:14px}
+  .sCtl .v{width:82px;text-align:right;font-variant-numeric:tabular-nums;flex:none}
+  .open{width:100%;margin-top:2px;background:var(--panel);border:1px dashed var(--line);
+    color:var(--ink2);border-radius:7px;padding:5px;font-size:11.5px;cursor:pointer;font-family:inherit}
+  .open:hover{border-color:var(--accent);color:var(--accent)}
+  input[type=file]{display:none}
+  /* ---------- 統計表 ---------- */
+  .statsTbl{width:100%;border-collapse:collapse}
+  .statsTbl th{font-size:10px;color:var(--ink3);font-weight:600;text-align:right;padding:2px 4px;white-space:nowrap}
+  .statsTbl th:first-child{text-align:left}
+  .statsTbl td{font-size:12px;font-weight:700;text-align:right;padding:3px 4px;
+    font-variant-numeric:tabular-nums;border-top:1px solid var(--line);white-space:nowrap}
+  .statsTbl td.nm{text-align:left;font-size:11px;max-width:110px;overflow:hidden;text-overflow:ellipsis}
+  /* ---------- 摩擦円(1つに全走行を重ねる) ---------- */
+  #topPane{display:flex;gap:10px;padding:8px;border-bottom:1px solid var(--line);
+    align-items:flex-start;overflow:hidden}
+  #ggWrap{flex:none;position:relative}
+  #ggMain{border-radius:12px;background:#10151d;display:block}
+  #cmpBox{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;gap:4px;overflow:hidden}
+  #cmpHead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    font-size:11px;color:var(--ink2)}
+  #cmpHead b{color:var(--ink);font-size:12px}
+  #cmpWrap{flex:1;min-height:0;overflow:auto}
+  #cmpTbl{width:100%;border-collapse:collapse;table-layout:fixed}
+  #cmpTbl th{font-size:10px;color:var(--ink3);font-weight:600;text-align:right;
+    padding:1px 6px;white-space:nowrap}
+  #cmpTbl th.nm{text-align:left}
+  #cmpTbl td{font-size:16px;font-weight:700;text-align:right;padding:3px 5px;
+    font-variant-numeric:tabular-nums;border-top:1px solid var(--line);white-space:nowrap}
+  #cmpTbl td.nm{text-align:left;font-size:12px;overflow:hidden}
+  #cmpTbl td.nm span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #cmpBox.narrow #cmpTbl td{font-size:13px;padding:2px 3px}
+  #cmpBox.narrow #cmpTbl td.nm{font-size:11px}
+  #cmpBox.narrow .statsTbl td{font-size:11px}
+  #cmpTbl td.use{color:var(--accent2)}
+  #cmpTbl td.off{opacity:.35}
+  #cmpTbl .bar{height:11px;border-radius:3px;background:var(--panel2);position:relative;overflow:hidden}
+  #cmpTbl .bar i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:3px;display:block}
+  #cmpTbl .bar u{position:absolute;top:0;bottom:0;left:83.3%;width:1px;background:#f43f5e;opacity:.8}
+  #cmpEmpty{color:var(--ink3);font-size:12px;padding:16px 4px;line-height:1.8}
+  #statsWrap{display:none;margin-top:12px}
+  #statsWrap .statsTbl{table-layout:fixed}
+  #statsWrap .statsTbl th:first-child,#statsWrap .statsTbl td:first-child{width:25%}
+  #statsWrap .statsTbl td{font-size:12px;padding:2px 4px}
+  #statsWrap .statsTbl td.nm{max-width:none}
+  .miniH{font-size:10px;color:var(--ink3);font-weight:700;letter-spacing:.04em;
+    border-top:1px solid var(--line);padding-top:6px;margin-bottom:2px}
+  /* ---------- グラフ ---------- */
+  #chartPane{display:flex;flex-direction:column;min-height:0;padding:8px;gap:6px}
+  .chartBox{position:relative;background:var(--panel2);border-radius:8px;flex:1 1 0;min-height:56px}
+  .chartBox canvas{width:100%;height:100%;display:block;border-radius:8px;cursor:crosshair}
+  .chartBox canvas.selMode{cursor:col-resize}
+  .chSel{position:absolute;top:4px;right:5px;background:rgba(22,27,35,.88);color:var(--ink2);
+    border:1px solid var(--line);border-radius:6px;font-size:10px;padding:1px 3px}
+  .chTip{position:absolute;pointer-events:none;display:none;background:rgba(14,17,22,.95);
+    border:1px solid var(--line);border-radius:7px;padding:4px 7px;font-size:11px;
+    line-height:1.5;white-space:nowrap;z-index:5;font-variant-numeric:tabular-nums}
+  .ctrl{flex:none;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:7px 10px;color:var(--ink2)}
+  .ctrl label{display:flex;align-items:center;gap:5px;white-space:nowrap}
+  .ctrl .pb{background:var(--accent);color:#04222f;border:none;border-radius:8px;
+    font-weight:700;padding:6px 18px;font-size:14px;cursor:pointer;font-family:inherit}
+  #clock{font-variant-numeric:tabular-nums;font-size:15px;font-weight:700;color:var(--ink)}
+  #seek{flex:1 1 200px;min-width:120px}
+  /* ---------- 地図 ---------- */
+  #mapPane{display:flex;flex-direction:column;min-width:0;min-height:0;border-left:1px solid var(--line)}
+  #mapBar{flex:none;display:flex;align-items:center;gap:10px;padding:6px 8px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;color:var(--ink2)}
+  #mapBox{flex:1;position:relative;min-height:0;background:var(--panel2)}
+  #gmap,#lmap{position:absolute;inset:0}
+  #lmap{display:none}
+  #mapNote{position:absolute;left:10px;right:10px;bottom:22px;z-index:500;cursor:pointer;
+    background:rgba(14,17,22,.93);border:1px solid var(--line);border-radius:9px;
+    padding:8px 10px;font-size:11.5px;color:var(--ink2);display:none;line-height:1.6}
+  #mapLegend{position:absolute;right:10px;top:54px;z-index:500;background:rgba(14,17,22,.86);
+    border:1px solid var(--line);border-radius:9px;padding:6px 9px;font-size:11px;line-height:1.7;
+    display:none;pointer-events:none}
+  #mapLegend .lg{display:flex;align-items:center;gap:6px}
+  #mapLegend .bar{width:16px;height:3px;border-radius:2px;flex:none}
+  /* ---------- ダイアログ ---------- */
+  dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    border-radius:14px;padding:18px;max-width:560px;font:inherit}
+  dialog::backdrop{background:rgba(0,0,0,.66)}
+  dialog h2{font-size:15px;margin-bottom:10px;color:var(--accent)}
+  dialog ol{margin:8px 0 8px 18px;font-size:12px;color:var(--ink2);line-height:1.9}
+  dialog code{background:var(--panel2);border-radius:4px;padding:1px 5px;font-size:11.5px}
+  #keyIn{width:100%;margin:8px 0 4px;font-size:13px;padding:7px 9px}
+  /* ---------- 動画 ---------- */
+  #vidBox{display:none}
+  #vid{width:100%;border-radius:8px;background:#000;display:block}
+  .kv{display:flex;justify-content:space-between;align-items:center;gap:8px;
+    font-size:12px;color:var(--ink2);padding:3px 0}
+  .trigRow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;
+    color:var(--ink2);margin-bottom:5px}
+  .numS{width:52px;text-align:right}
+  #trigRes{font-size:11px;color:var(--ink2);line-height:1.75;margin-top:6px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="t">摩擦円ビューアー<span>PC版 v1.0</span></div>
+  <label>基準 最大G <input type="number" id="hMaxG" step="0.05" min="0.3" max="3" value="1.05" style="width:62px"></label>
+  <label title="チェックを外すと各ファイルに記録された最大Gで使用率を計算します">
+    <input type="checkbox" id="hUniMaxG" checked>使用率を統一</label>
+  <label>なめらかさ <input type="range" id="hSmooth" min="0" max="100" step="5" value="30" style="width:110px">
+    <span id="hSmoothV" style="width:2em;text-align:right">30</span></label>
+  <div class="sp"></div>
+  <button class="btn" id="btnDemo">デモ5本を読み込む</button>
+  <button class="btn" id="btnCsv">CSV書き出し</button>
+  <button class="btn" id="btnKey">Googleマップ設定</button>
+</header>
+
+<div id="layout">
+  <!-- ============ 左レール ============ -->
+  <aside id="rail">
+    <div class="card">
+      <h3>ファイル<span class="sub">最大5本 / ドラッグ＆ドロップ可</span></h3>
+      <div id="slotList"></div>
+      <div class="rowBtns">
+        <button class="btn" id="btnMulti">まとめて開く</button>
+        <button class="btn" id="btnClearAll">全部クリア</button>
+      </div>
+      <div class="note" style="margin-top:6px">記録アプリで保存した <b>.json</b>、またはこのビューアーで書き出した
+        <b>.csv</b> を開きます(CSVは1つのファイルから複数本まとめて復元します)。
+        ウィンドウにファイルをドロップしても読み込めます。</div>
+      <input type="file" id="fMulti" accept=".json,.csv,application/json,text/csv" multiple>
+    </div>
+
+    <div class="card">
+      <h3>グラフの表示項目</h3>
+      <div class="kv"><span>上</span><select class="chPick" data-n="0"></select></div>
+      <div class="kv"><span>中</span><select class="chPick" data-n="1"></select></div>
+      <div class="kv"><span>下</span><select class="chPick" data-n="2"></select></div>
+    </div>
+
+    <div class="card">
+      <h3>自動トリガの確認<span class="sub">記録の開始/終了条件</span></h3>
+      <div class="trigRow">
+        <span style="color:var(--ink3)">開始</span>
+        <select id="trigSt"><option value="manual">手動(先頭から)</option>
+          <option value="speed">速度で自動開始</option><option value="g">Gで自動開始</option>
+          <option value="vert">縦G(段差)で自動開始</option></select>
+      </div>
+      <div class="trigRow">
+        <label><input type="number" id="trigStSpd" class="numS" min="3" step="1"> km/h以上</label>
+        <label><input type="number" id="trigStG" class="numS" min="0.1" max="1" step="0.05"> G以上</label>
+        <label><input type="number" id="trigStVert" class="numS" min="0.1" max="3" step="0.05"> 縦G以上</label>
+      </div>
+      <div class="trigRow">
+        <span style="color:var(--ink3)">終了</span>
+        <select id="trigEd"><option value="manual">手動(末尾まで)</option>
+          <option value="speed">速度低下で自動終了</option>
+          <option value="vert">縦G(段差)で自動終了</option></select>
+      </div>
+      <div class="trigRow">
+        <label><input type="number" id="trigEdSpd" class="numS" min="1" step="1"> km/h未満が</label>
+        <label><input type="number" id="trigEdSec" class="numS" min="2" step="1"> 秒</label>
+        <label><input type="number" id="trigEdVert" class="numS" min="0.1" max="3" step="0.05"> 縦G以上</label>
+        <label>無効 <input type="number" id="trigMinSec" class="numS" min="0" step="1"> 秒</label>
+      </div>
+      <div class="rowBtns">
+        <button class="btn pr" id="btnTrigCheck">判定する</button>
+        <button class="btn" id="btnTrigApply">この範囲で切り出す</button>
+      </div>
+      <div class="trigRow" style="margin-top:6px">
+        <label><input type="checkbox" id="trigMark" checked>グラフに位置を表示</label>
+      </div>
+      <div id="trigRes"></div>
+    </div>
+
+    <div class="card">
+      <h3>動画(任意・Aに同期)</h3>
+      <div class="rowBtns" style="margin-top:0">
+        <button class="btn" id="btnVideo">動画を開く</button>
+        <button class="btn" id="btnVideoClr">外す</button>
+      </div>
+      <div id="vidBox" style="margin-top:7px">
+        <video id="vid" controls playsinline muted></video>
+        <div class="kv" style="margin-top:4px">同期補正
+          <span><input type="range" id="vOfs" min="-5" max="5" step="0.1" value="0" style="width:110px">
+          <span id="vOfsV">0.0</span>s</span></div>
+      </div>
+      <div class="note" style="margin-top:6px">動画を読み込むと、動画の再生位置にすべてのデータが同期します。</div>
+      <input type="file" id="fVideo" accept="video/*">
+    </div>
+
+    <div class="note" style="text-align:center;padding:4px 0 12px">
+      データはすべてPC内で処理され、外部送信はありません(地図タイルの表示を除く)。</div>
+  </aside>
+
+  <div class="grip" id="gripA"></div>
+
+  <!-- ============ メイン ============ -->
+  <main id="main">
+    <div id="leftPane">
+      <section id="topPane">
+        <div id="ggWrap"><canvas id="ggMain"></canvas></div>
+        <div id="cmpBox">
+          <div id="cmpHead">
+            <b>摩擦円の比較</b>
+            <label><input type="checkbox" id="chkHist" checked>全体の軌跡を重ねる</label>
+            <label><input type="checkbox" id="chkTrail" checked>直近3秒の軌跡</label>
+            <span id="cmpClock" style="color:var(--accent2);font-weight:700"></span>
+          </div>
+          <div id="cmpWrap">
+            <table id="cmpTbl"></table>
+            <div id="cmpEmpty">.json ファイルを読み込むと、1つの摩擦円に全走行(最大5本)を色分けして重ねて表示します。<br>
+              左の一覧でファイルごとに表示ON/OFF・開始補正・表示範囲を調整できます。</div>
+            <div id="statsWrap">
+              <div class="miniH">走行全体(表示範囲内)</div>
+              <table class="statsTbl" id="statsTbl"></table>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div id="chartPane">
+        <div class="chartBox"><canvas id="strip0"></canvas><select class="chSel chPick" data-n="0"></select><div class="chTip" id="tip0"></div></div>
+        <div class="chartBox"><canvas id="strip1"></canvas><select class="chSel chPick" data-n="1"></select><div class="chTip" id="tip1"></div></div>
+        <div class="chartBox"><canvas id="strip2"></canvas><select class="chSel chPick" data-n="2"></select><div class="chTip" id="tip2"></div></div>
+        <div class="ctrl">
+          <button class="pb" id="btnPlay">▶ 再生</button>
+          <span id="clock">0:00.0</span>
+          <input type="range" id="seek" min="0" max="1000" value="0">
+          <label>速度 <select id="rpSpeed">
+            <option>0.25</option><option>0.5</option><option selected>1</option>
+            <option>2</option><option>4</option></select>x</label>
+          <label>グラフで範囲選択 <select id="selTgt"><option value="">しない(クリックで移動)</option></select></label>
+          <button class="btn sm" id="btnTrimReset">範囲リセット</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grip" id="gripB"></div>
+
+    <div id="mapPane">
+      <div id="mapBar">
+        <b style="color:var(--ink)">地図</b>
+        <label>種類 <select id="mapType">
+          <option value="roadmap">地図</option><option value="satellite">航空写真</option>
+          <option value="hybrid" selected>航空写真+地図</option><option value="terrain">地形</option></select></label>
+        <label><input type="checkbox" id="chkFollow" checked>現在位置に追従</label>
+        <label>ズーム <button class="btn sm" id="btnZoomIn">＋</button>
+          <button class="btn sm" id="btnZoomOut">−</button>
+          <button class="btn sm" id="btnFit">全体</button></label>
+        <div class="sp" style="flex:1"></div>
+        <button class="btn sm" id="btnMapMax">地図を最大化</button>
+        <a class="btn sm" id="btnGmapOpen" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">Googleマップで開く</a>
+      </div>
+      <div id="mapBox">
+        <div id="gmap"></div>
+        <div id="lmap"></div>
+        <div id="mapLegend"></div>
+        <div id="mapNote"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<dialog id="dlgKey">
+  <h2>Googleマップの設定</h2>
+  <div class="note" style="font-size:12px;color:var(--ink2)">
+    Googleマップ(航空写真・ストリート表示・ズーム)を使うには、Google Maps JavaScript API のAPIキーが必要です。
+    キーはこのPCのブラウザ内(localStorage)にだけ保存され、Googleの地図表示以外には使いません。</div>
+  <ol>
+    <li>Google Cloud Console でプロジェクトを作成し、請求先を設定</li>
+    <li><code>Maps JavaScript API</code> を有効化</li>
+    <li>「認証情報」でAPIキーを作成(HTTPリファラー制限の設定を推奨)</li>
+    <li>作成したキーを下に貼り付けて保存</li>
+  </ol>
+  <input type="text" id="keyIn" placeholder="AIza... で始まるAPIキーを貼り付け" autocomplete="off" spellcheck="false">
+  <div class="note">キーを空にして保存すると、OpenStreetMap(キー不要)の地図に戻ります。</div>
+  <div class="rowBtns" style="margin-top:12px">
+    <button class="btn pr" id="btnKeySave">保存して地図を読み込む</button>
+    <button class="btn" id="btnKeyClose">閉じる</button>
+  </div>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* =========================================================================
+   摩擦円ビューアー PC版
+   - 記録アプリ(friction-circle_2.html)が保存した .json を最大5本まで同時に表示
+   - 摩擦円は1本につき1つ、横並びで比較
+   - 地図はGoogleマップ(APIキー設定時)/OpenStreetMap(キー無しのフォールバック)
+   データ形式:
+     samples: [t_ms, 横G, 前後G, ヨーレートdps(+右回り), 縦G(+上)]
+     gps    : [t_ms, 緯度, 経度, 速度km/h, 進行方位deg]
+   ========================================================================= */
+const $=id=>document.getElementById(id);
+
+/* ================= 設定(このPCに保存) ================= */
+const view={maxG:1.05,uniMaxG:true,smooth:30,charts:["use","spd","lon"],
+  mapType:"hybrid",follow:true,gkey:"",vofs:0,
+  trig:{start:"manual",startSpd:15,startG:0.30,startVert:0.35,
+        stop:"manual",stopSpd:8,stopSec:10,stopVert:0.35,minSec:5}};
+function loadCfg(){
+  try{const s=JSON.parse(localStorage.getItem("fcpc"));if(s)Object.assign(view,s);}catch(e){}
+  view.trig=Object.assign({start:"manual",startSpd:15,startG:0.30,startVert:0.35,
+    stop:"manual",stopSpd:8,stopSec:10,stopVert:0.35,minSec:5},view.trig||{});
+  if(!Array.isArray(view.charts)||view.charts.length<3)view.charts=["use","spd","lon"];
+}
+function saveCfg(){try{localStorage.setItem("fcpc",JSON.stringify(view));}catch(e){}}
+const scaleG=()=>view.maxG*1.2;                 // 摩擦円の表示スケール
+const effMaxG=sl=>view.uniMaxG?view.maxG:sl.maxG; // 使用率の分母
+
+/* ================= スロット(A〜E) ================= */
+const SL=[
+  {k:"A",col:"#38bdf8",rgb:"56,189,248"},
+  {k:"B",col:"#fb923c",rgb:"251,146,60"},
+  {k:"C",col:"#34d399",rgb:"52,211,153"},
+  {k:"D",col:"#a78bfa",rgb:"167,139,250"},
+  {k:"E",col:"#f472b6",rgb:"244,114,182"}
+].map(o=>Object.assign(o,{data:null,orig:null,file:"",maxG:1.05,off:0,
+  trim:null,on:true,dur:0,rate:25,gg:null,el:{},trig:null}));
+const byKey=k=>SL.find(s=>s.k===k);
+const loadedSL=()=>SL.filter(s=>s.data);
+const shownSL=()=>SL.filter(s=>s.data&&s.on);
+
+/* ================= 共通ユーティリティ ================= */
+const G0=9.80665;
+const BCOL=["#34d399","#fbbf24","#f43f5e"];      // 単独表示時の使用率カラー
+const escH=v=>String(v).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const cleanFile=nm=>String(nm||"").replace(/\.json$/i,"").trim();
+function idxAt(arr,t){let lo=0,hi=arr.length-1;
+  while(lo<hi){const m=(lo+hi+1)>>1;if(arr[m][0]<=t)lo=m;else hi=m-1;}return lo;}
+function posOf(g,t){if(!g||!g.length)return null;
+  const i=idxAt(g,t),a=g[i],b=g[Math.min(i+1,g.length-1)];
+  const f=b[0]>a[0]?Math.min(1,Math.max(0,(t-a[0])/(b[0]-a[0]))):0;
+  const ca=(a.length>4&&a[4]!=null)?a[4]:null,cb=(b.length>4&&b[4]!=null)?b[4]:null;
+  return{lat:a[1]+(b[1]-a[1])*f,lon:a[2]+(b[2]-a[2])*f,
+    spd:(a[3]!=null&&b[3]!=null)?a[3]+(b[3]-a[3])*f:a[3],
+    crs:(ca!=null&&cb!=null&&b[0]>a[0])?ca+wrapA(cb-ca)*f:(ca!=null?ca:cb)};}
+const vrtOf=v=>(v.length>4&&v[4]!=null)?v[4]:null;
+const hasVrt=S=>!!(S&&S.length&&S[0].length>4);
+function fmtMS(ms){const s=Math.round(ms/1000);
+  return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
+function fmtMSf(ms){const s=Math.max(0,ms)/1000,m=Math.floor(s/60),r=s-m*60;
+  return m+":"+(r<10?"0":"")+r.toFixed(1);}
+/* 符号つき2桁表示(-0.00 のような表記を避ける) */
+const sg=v=>{const r=v.toFixed(2);return +r===0?"0.00":(v>0?"+":"")+r;};
+function lapText(ms){const t=Math.max(0,ms)/1000,m=Math.floor(t/60),r=t-m*60;
+  return m+":"+(r<10?"0":"")+r.toFixed(2);}
+/* ---- 日時の表示(端末のタイムゾーン=日本なら日本時間に直す) ----
+   JSONの date はUTCのISO文字列なので、表示・ファイル名は必ずここを通す */
+const z2=v=>String(v).padStart(2,"0");
+function locDate(iso){if(!iso)return null;const d=new Date(iso);return isNaN(d)?null:d;}
+function fmtDT(iso,withYear){            // 表示用: 2026/09/24 15:30
+  const d=locDate(iso);if(!d)return "";
+  return(withYear===false?"":d.getFullYear()+"/")+
+    z2(d.getMonth()+1)+"/"+z2(d.getDate())+" "+z2(d.getHours())+":"+z2(d.getMinutes());
+}
+function isoLocal(iso){                  // 保存用: 2026-09-24T15:30:12+09:00
+  const d=locDate(iso);if(!d)return "";
+  const o=-d.getTimezoneOffset(),sgn=o>=0?"+":"-",oa=Math.abs(o);
+  return d.getFullYear()+"-"+z2(d.getMonth()+1)+"-"+z2(d.getDate())+"T"+
+    z2(d.getHours())+":"+z2(d.getMinutes())+":"+z2(d.getSeconds())+
+    sgn+z2(Math.floor(oa/60))+":"+z2(oa%60);
+}
+function stampOf(iso){                   // ファイル名用: 20260924_1530
+  const d=locDate(iso)||new Date();
+  return d.getFullYear()+z2(d.getMonth()+1)+z2(d.getDate())+"_"+z2(d.getHours())+z2(d.getMinutes());
+}
+
+/* なめらかさフィルタ(メディアン3=段差スパイク除去 + EMA=振動平滑化) */
+const med3=(a,b,c)=>Math.max(Math.min(a,b),Math.min(Math.max(a,b),c));
+const tauOf=v=>(v/100)*(v/100)*0.8;
+function smoothArr(S,rate,val){
+  const tau=tauOf(val);
+  if(tau<=0||S.length<3)return S;
+  const dt=1/(rate||25),a=dt/(tau+dt);
+  const out=new Array(S.length);
+  let e0=S[0][1],e1=S[0][2];
+  for(let i=0;i<S.length;i++){
+    const i0=Math.max(0,i-1),i2=Math.min(S.length-1,i+1);
+    const ml=med3(S[i0][1],S[i][1],S[i2][1]);
+    const mo=med3(S[i0][2],S[i][2],S[i2][2]);
+    e0+=a*(ml-e0);e1+=a*(mo-e1);
+    out[i]=[S[i][0],e0,e1];
+  }
+  return out;
+}
+/* 車両の向き(ヨー積分 + GPS進行方位で補正) → スリップアングル */
+const wrapA=a=>{while(a>180)a-=360;while(a<-180)a+=360;return a;};
+function buildSlip(data){
+  const S=data.samples;
+  if(!S.length||S[0].length<4){data.SLIP=null;return;}
+  const g=data.gps||[];
+  const courseAt=t=>{
+    if(!g.length)return null;
+    const i=idxAt(g,t),a=g[i],b=g[Math.min(i+1,g.length-1)];
+    if(a.length<5||a[4]==null)return(b.length>4?b[4]:null);
+    if(b.length<5||b[4]==null||b[0]<=a[0])return a[4];
+    const f=(t-a[0])/(b[0]-a[0]);
+    return a[4]+wrapA(b[4]-a[4])*f;
+  };
+  const c0=courseAt(S[0][0]);
+  let hd=(c0!=null?c0:0);
+  const out=new Array(S.length);
+  for(let i=0;i<S.length;i++){
+    const dt=i?(S[i][0]-S[i-1][0])/1000:0;
+    hd+=(S[i][3]||0)*dt;
+    const co=courseAt(S[i][0]);
+    if(co!=null){
+      const straight=Math.abs(S[i][1])<0.12&&Math.abs(S[i][3]||0)<4;
+      hd+=wrapA(co-hd)*(straight?0.05:0.004);
+      out[i]=[S[i][0],wrapA(hd-co),hd];
+    }else out[i]=[S[i][0],0,hd];
+  }
+  data.SLIP=out;
+}
+function slipOf(sl,t){const S=sl.data&&sl.data.SLIP;if(!S)return null;
+  const i=idxAt(S,t);return{slip:S[i][1],hd:S[i][2]};}
+
+/* ================= 摩擦円レンダラ(1つに全走行を重ねる) =================
+   series = [{k,col,rgb,trail,cur}] を渡すと、色分けして同じ円の上に描く */
+function createGG(canvas){
+  const ctx=canvas.getContext("2d");
+  const hist=document.createElement("canvas"),hctx=hist.getContext("2d");
+  let px=280,d=1;
+  const o={series:[]};
+  o.setSize=s=>{
+    if(px===s&&canvas.width===Math.round(s*(window.devicePixelRatio||1)))return;
+    d=window.devicePixelRatio||1;px=s;
+    canvas.width=Math.round(s*d);canvas.height=Math.round(s*d);
+    canvas.style.width=s+"px";canvas.style.height=s+"px";
+    hist.width=canvas.width;hist.height=canvas.height;
+    o.rebuild&&o.rebuild();o.redraw();
+  };
+  o.size=()=>px;
+  o.clearHist=()=>hctx.clearRect(0,0,hist.width,hist.height);
+  const XY=(gx,gy)=>{const R=px*d/2,r=R*0.92/scaleG();return[R+gx*r,R-gy*r];};
+  o.histSeg=(p,q,c)=>{const[a,b]=XY(p[0],p[1]),[e,f]=XY(q[0],q[1]);
+    hctx.strokeStyle=c;hctx.lineWidth=2*d;hctx.lineCap="round";
+    hctx.beginPath();hctx.moveTo(a,b);hctx.lineTo(e,f);hctx.stroke();};
+  o.redraw=()=>{
+    const W=px*d,R=W/2,r1=R*0.92/scaleG();
+    ctx.clearRect(0,0,W,W);
+    // 0.2Gごとの目盛りリング
+    ctx.strokeStyle="#26303f";ctx.lineWidth=1*d;
+    for(let g=.2;g<=scaleG()+.001;g+=.2){ctx.beginPath();ctx.arc(R,R,g*r1,0,7);ctx.stroke();}
+    ctx.beginPath();ctx.moveTo(R,R-scaleG()*r1);ctx.lineTo(R,R+scaleG()*r1);
+    ctx.moveTo(R-scaleG()*r1,R);ctx.lineTo(R+scaleG()*r1,R);ctx.stroke();
+    // 基準の最大G(赤い破線)
+    ctx.strokeStyle="#f43f5e";ctx.lineWidth=2*d;ctx.setLineDash([6*d,4*d]);
+    ctx.beginPath();ctx.arc(R,R,view.maxG*r1,0,7);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle="#5f6c7d";ctx.font=(11*d)+"px sans-serif";ctx.textAlign="center";
+    ctx.fillText("加速",R,14*d);ctx.fillText("減速",R,W-6*d);
+    ctx.textAlign="left";ctx.fillText("左",5*d,R-5*d);
+    ctx.textAlign="right";ctx.fillText("右",W-5*d,R-5*d);
+    ctx.fillStyle="#f43f5e";ctx.textAlign="left";
+    ctx.fillText("最大"+view.maxG.toFixed(2)+"G",R+view.maxG*r1*0.55,R-view.maxG*r1*0.80);
+    // 全体の軌跡(薄い層)
+    ctx.drawImage(hist,0,0);
+    // 直近3秒の軌跡: 新しいほど濃く
+    for(const s of o.series){
+      const tr=s.trail;if(!tr||tr.length<2)continue;
+      ctx.lineWidth=3*d;ctx.lineCap="round";
+      for(let i=1;i<tr.length;i++){
+        const age=(tr[tr.length-1][2]-tr[i][2])/3000,al=Math.max(0,1-age);
+        const[a,b]=XY(tr[i-1][0],tr[i-1][1]),[e,f]=XY(tr[i][0],tr[i][1]);
+        ctx.strokeStyle="rgba("+s.rgb+","+(0.15+0.85*al).toFixed(2)+")";
+        ctx.beginPath();ctx.moveTo(a,b);ctx.lineTo(e,f);ctx.stroke();
+      }
+    }
+    // 現在位置の点(先に読み込んだデータほど手前に描く)
+    for(let i=o.series.length-1;i>=0;i--){
+      const s=o.series[i];if(!s.cur)continue;
+      const[a,b]=XY(s.cur[0],s.cur[1]);
+      ctx.fillStyle=s.col;ctx.strokeStyle="#0e1116";ctx.lineWidth=2*d;
+      ctx.beginPath();ctx.arc(a,b,7.5*d,0,7);ctx.fill();ctx.stroke();
+      ctx.fillStyle="#0e1116";ctx.font="bold "+(9*d)+"px sans-serif";
+      ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.fillText(s.k,a,b+0.5*d);
+      ctx.textAlign="left";ctx.textBaseline="alphabetic";
+    }
+  };
+  return o;
+}
+const GG=createGG($("ggMain"));
+GG.rebuild=()=>buildHist();
+
+/* ================= 左レール: ファイルスロットのUI ================= */
+const TRIM_MIN=500;  // 表示範囲の最小の長さ[ms]
+function buildSlotUI(){
+  const box=$("slotList");box.innerHTML="";
+  for(const sl of SL){
+    const d=document.createElement("div");
+    d.className="slot empty";d.dataset.k=sl.k;
+    d.innerHTML=
+      '<div class="sHead"><span class="dot" style="background:'+sl.col+'"></span>'+
+      '<span class="k" style="color:'+sl.col+'">'+sl.k+'</span>'+
+      '<span class="nm">(未読込)</span>'+
+      '<label title="表示/非表示"><input type="checkbox" class="vis" checked></label>'+
+      '<button class="x" title="外す">×</button></div>'+
+      '<div class="sMeta"></div>'+
+      '<div class="sCtl">'+
+        '<label>開始補正<input type="range" class="off" min="-15" max="15" step="0.1" value="0">'+
+          '<span class="v ofv">0.0s</span></label>'+
+        '<label>開始<input type="range" class="t0"><span class="v tv0"></span></label>'+
+        '<label>終了<input type="range" class="t1"><span class="v tv1"></span></label>'+
+      '</div>'+
+      '<button class="open">'+sl.k+' にファイルを開く</button>'+
+      '<input type="file" class="fin" accept=".json,.csv,application/json,text/csv">';
+    box.appendChild(d);
+    const q=c=>d.querySelector(c);
+    sl.el={row:d,nm:q(".nm"),meta:q(".sMeta"),vis:q(".vis"),off:q(".off"),ofv:q(".ofv"),
+      t0:q(".t0"),t1:q(".t1"),tv0:q(".tv0"),tv1:q(".tv1")};
+    q(".open").addEventListener("click",()=>q(".fin").click());
+    q(".fin").addEventListener("change",e=>{
+      const f=e.target.files[0];e.target.value="";
+      if(f)readJson(f,sl);
+    });
+    q(".x").addEventListener("click",()=>clearSlot(sl));
+    sl.el.vis.addEventListener("change",()=>{
+      sl.on=sl.el.vis.checked;
+      layoutCircles();buildCharts();buildMap();updStats();render(P.t);
+    });
+    sl.el.off.addEventListener("input",e=>{
+      sl.off=parseFloat(e.target.value);sl.el.ofv.textContent=sl.off.toFixed(1)+"s";
+      buildCharts();render(P.t);
+    });
+    const lab=()=>{
+      sl.el.tv0.textContent=fmtMSf(+sl.el.t0.value);
+      sl.el.tv1.textContent=fmtMSf(+sl.el.t1.value);
+    };
+    sl.el.t0.addEventListener("input",()=>{
+      if(+sl.el.t0.value>+sl.el.t1.value-TRIM_MIN)
+        sl.el.t0.value=Math.max(0,+sl.el.t1.value-TRIM_MIN);lab();});
+    sl.el.t1.addEventListener("input",()=>{
+      if(+sl.el.t1.value<+sl.el.t0.value+TRIM_MIN)
+        sl.el.t1.value=Math.min(+sl.el.t1.max,+sl.el.t0.value+TRIM_MIN);lab();});
+    const apply=()=>{if(!sl.data)return;sl.trim=[+sl.el.t0.value,+sl.el.t1.value];applyTrim(sl);};
+    sl.el.t0.addEventListener("change",apply);
+    sl.el.t1.addEventListener("change",apply);
+    sl.el.lab=lab;sl.el.apply=apply;
+  }
+}
+/* 表示範囲スライダーの初期化(刻み=加速度センサー1サンプル) */
+function initTrimUI(sl){
+  const st=Math.max(1,Math.round(1000/(sl.rate||25)));
+  const mx=Math.ceil(sl.origDur/st)*st;
+  for(const s of[sl.el.t0,sl.el.t1]){s.min=0;s.max=mx;s.step=st;}
+  sl.el.t0.value=0;sl.el.t1.value=mx;sl.el.lab();
+}
+/* 元データ(トリム前)の時刻[ms]で表示範囲を設定 */
+function setTrimRange(sl,t0,t1){
+  if(!sl.data)return;
+  const mx=+sl.el.t1.max,st=+sl.el.t0.step||1,q=v=>Math.round(v/st)*st;
+  let a=q(Math.min(t0,t1)),b=q(Math.max(t0,t1));
+  a=Math.max(0,Math.min(Math.max(0,mx-TRIM_MIN),a));
+  b=Math.min(mx,Math.max(a+TRIM_MIN,b));
+  sl.el.t0.value=a;sl.el.t1.value=b;sl.el.lab();sl.el.apply();
+}
+const cutArr=(arr,t0,t1)=>arr.filter(s=>s[0]>=t0&&s[0]<=t1)
+  .map(s=>{const c=s.slice();c[0]=s[0]-t0;return c;});
+function applyTrim(sl){
+  const o=sl.orig;if(!o)return;
+  const t0=sl.trim[0],t1=sl.trim[1],j=sl.data;
+  j.samples=cutArr(o.samples,t0,t1);
+  if(!j.samples.length)j.samples=[[0,0,0,0,0]];
+  j.gps=o.gps.length?cutArr(o.gps,t0,t1):[];
+  if(o.raw)j.raw={format:o.raw.format,samples:cutArr(o.raw.samples,t0,t1)};
+  sl.dur=j.samples[j.samples.length-1][0]||1;
+  buildSlip(j);
+  applySmooth();buildMap();
+}
+
+/* ================= ファイル読み込み (.json / .csv) ================= */
+function readJson(file,slot){
+  if(/\.csv$/i.test(file.name)){readCsv(file,slot);return;}
+  file.text().then(txt=>{
+    let j;
+    try{j=JSON.parse(txt);}catch(err){alert(file.name+" を読み込めませんでした: "+err);return;}
+    loadInto(slot||firstFree(),j,file.name);
+  });
+}
+const firstFree=()=>SL.find(s=>!s.data)||SL[SL.length-1];
+/* ---- CSV(このビューアーで書き出したもの)を読み戻す ---- */
+function parseCSV(text){
+  text=text.replace(/^﻿/,"");   // Excel向けのBOMを取り除く
+  const rows=[];let row=[],cell="",q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){if(text[i+1]==='"'){cell+='"';i++;}else q=false;}
+      else cell+=c;
+    }else if(c==='"')q=true;
+    else if(c===","){row.push(cell);cell="";}
+    else if(c==="\n"){row.push(cell);rows.push(row);row=[];cell="";}
+    else if(c!=="\r")cell+=c;
+  }
+  if(cell!==""||row.length){row.push(cell);rows.push(row);}
+  return rows.filter(r=>r.length>1||(r[0]||"").trim()!=="");
+}
+/* 2点間の進行方位(度): 進行方位列が無いCSV用の代替 */
+function bearing(la1,lo1,la2,lo2){
+  const k=Math.cos((la1+la2)/2*Math.PI/180);
+  const dy=la2-la1,dx=(lo2-lo1)*k;
+  if(!dx&&!dy)return null;
+  return((Math.atan2(dx,dy)*180/Math.PI)+360)%360;
+}
+/* CSV1つから、走行ごと(データ列 A〜E)に記録データを復元する */
+function csvToData(text,fname){
+  const rows=parseCSV(text);
+  if(rows.length<2)throw new Error("データ行がありません");
+  const H={};rows[0].forEach((h,i)=>{H[String(h).trim()]=i;});
+  for(const k of["t_s","横G","前後G"])
+    if(H[k]==null)throw new Error("列「"+k+"」が見つかりません(このビューアーで書き出したCSVのみ読み込めます)");
+  const num=(r,k)=>{const i=H[k];if(i==null)return null;
+    const v=(r[i]||"").trim();if(v==="")return null;
+    const n=parseFloat(v);return isFinite(n)?n:null;};
+  const str=(r,k)=>{const i=H[k];return i==null?"":String(r[i]||"").trim();};
+  const hasCol=k=>H[k]!=null;
+  const hasRaw=["生accX","生accY","生accZ","生rotX","生rotY","生rotZ"].every(hasCol);
+  // 走行ごとに行を集める(データ列+ファイル名列の組で1本)
+  const groups=new Map();
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    if(num(r,"t_s")==null)continue;
+    const key=str(r,"データ")+" "+str(r,"ファイル名");
+    let g=groups.get(key);
+    if(!g){g={p:str(r,"データ"),nm:str(r,"ファイル名"),rows:[]};groups.set(key,g);}
+    g.rows.push(r);
+  }
+  const out=[];
+  for(const g of groups.values()){
+    const rs=g.rows;
+    const hasZ=rs.some(r=>num(r,"縦G")!=null);
+    const hasYaw=rs.some(r=>num(r,"ヨーレートdps")!=null);
+    const hasCrs=rs.some(r=>num(r,"進行方位deg")!=null);
+    const S=[],RAW=[],pts=[];
+    for(const r of rs){
+      const t=Math.round(num(r,"t_s")*1000);
+      const la=num(r,"横G"),lo=num(r,"前後G");
+      if(la==null||lo==null)continue;
+      const s=[t,la,lo];
+      if(hasZ)s.push(num(r,"ヨーレートdps")||0,num(r,"縦G")||0);
+      else if(hasYaw)s.push(num(r,"ヨーレートdps")||0);
+      S.push(s);
+      const lat=num(r,"緯度"),lon=num(r,"経度");
+      if(lat!=null&&lon!=null)
+        pts.push([t,lat,lon,num(r,"速度kmh"),hasCrs?num(r,"進行方位deg"):null]);
+      if(hasRaw){
+        const v=["生accX","生accY","生accZ","生rotX","生rotY","生rotZ"].map(k=>num(r,k));
+        if(v.some(x=>x!=null))RAW.push([t,...v]);
+      }
+    }
+    if(S.length<2)continue;
+    // 記録レート: サンプル間隔の中央値から求める
+    const d=[];
+    for(let i=1;i<Math.min(S.length,120);i++)d.push(S[i][0]-S[i-1][0]);
+    d.sort((a,b)=>a-b);
+    const dt=d[Math.floor(d.length/2)]||40;
+    const rate=Math.max(5,Math.min(100,Math.round(1000/dt)));
+    // GPSは書き出し時に全サンプル分あるので5Hz程度に間引く
+    const step=Math.max(1,Math.round(rate/5)),gps=[];
+    for(let i=0;i<pts.length;i+=step)gps.push(pts[i]);
+    if(pts.length&&gps[gps.length-1]!==pts[pts.length-1])gps.push(pts[pts.length-1]);
+    if(!hasCrs)for(let i=0;i<gps.length;i++){   // 進行方位が無ければ前後の点から計算
+      const a=gps[Math.max(0,i-1)],b=gps[Math.min(gps.length-1,i+1)];
+      gps[i][4]=bearing(a[1],a[2],b[1],b[2]);
+    }
+    const maxG=num(rs[0],"車種最大G");
+    const j={app:"friction-circle-recorder",version:1,fromCsv:true,
+      car:{name:str(rs[0],"車種名")||"(CSVから復元)",maxG:maxG||view.maxG},
+      rate,samples:S,gps};
+    const dstr=str(rs[0],"記録日時");if(dstr)j.date=dstr;
+    if(RAW.length)j.raw={format:"[t_ms, accX, accY, accZ, rotX, rotY, rotZ]",samples:RAW};
+    const base=cleanFile(fname).replace(/\.csv$/i,"");
+    out.push({j,name:g.nm||(base+(g.p?"_"+g.p:""))});
+  }
+  if(!out.length)throw new Error("読み込めるデータ行がありませんでした");
+  return out;
+}
+function readCsv(file,slot){
+  file.text().then(txt=>{
+    let list;
+    try{list=csvToData(txt,file.name);}
+    catch(err){alert(file.name+" を読み込めませんでした:\n"+err.message);return;}
+    let target=slot,skipped=0;
+    for(const it of list){
+      const sl=target||SL.find(s=>!s.data);
+      target=null;
+      if(!sl){skipped++;continue;}
+      loadInto(sl,it.j,it.name);
+    }
+    if(skipped)alert("CSVには "+list.length+" 本入っていましたが、空きスロットが足りないため "+
+      skipped+" 本は読み込めませんでした(最大5本)。");
+  });
+}
+function loadInto(sl,j,fname){
+  if(!sl)  {alert("空きスロットがありません(最大5本)");return;}
+  if(!j||!Array.isArray(j.samples)||!j.samples.length){alert("データ形式が違います: "+fname);return;}
+  const first=!loadedSL().length;
+  sl.data=j;
+  sl.file=cleanFile(fname)||j.name||"(ファイル名なし)";
+  sl.maxG=(j.car&&j.car.maxG)||view.maxG;
+  sl.rate=j.rate||25;
+  sl.off=0;sl.on=true;
+  sl.orig={samples:j.samples,gps:j.gps||[],raw:j.raw||null};
+  sl.origDur=j.samples[j.samples.length-1][0]||1;
+  sl.dur=sl.origDur;
+  sl.trim=[0,sl.origDur];
+  if(first&&j.car&&j.car.maxG){view.maxG=j.car.maxG;$("hMaxG").value=view.maxG;saveCfg();}
+  if(first&&typeof j.smooth==="number"){
+    view.smooth=j.smooth;$("hSmooth").value=j.smooth;$("hSmoothV").textContent=j.smooth;}
+  buildSlip(j);
+  // UI
+  sl.el.row.classList.remove("empty");sl.el.row.classList.add("has");
+  sl.el.nm.textContent=sl.file;sl.el.nm.title=sl.file;sl.el.nm.style.color=sl.col;
+  sl.el.vis.checked=true;
+  sl.el.off.value=0;sl.el.ofv.textContent="0.0s";
+  initTrimUI(sl);
+  let mx=0;for(const s of j.samples)mx=Math.max(mx,Math.hypot(s[1],s[2]));
+  sl.el.meta.textContent=
+    (j.car&&j.car.name?j.car.name+" / ":"")+
+    (j.date?fmtDT(j.date)+" / ":"")+
+    (sl.origDur/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G / GPS"+(j.gps?j.gps.length:0)+"点"+
+    (typeof j.lap==="number"?" / 区間 "+lapText(j.lap):"");
+  layoutCircles();applySmooth();buildMap();evalTrig();refreshSelTgt();
+  P.t=Math.min(P.t,chartDur());
+}
+function clearSlot(sl){
+  sl.data=null;sl.orig=null;sl.file="";sl.off=0;sl.trim=null;sl.dur=0;sl.on=true;sl.trig=null;
+  sl.el.row.classList.add("empty");sl.el.row.classList.remove("has");
+  sl.el.nm.textContent="(未読込)";sl.el.nm.style.color="";sl.el.meta.textContent="";
+  sl.el.vis.checked=true;
+  layoutCircles();applySmooth();buildMap();evalTrig();refreshSelTgt();updStats();
+}
+$("btnMulti").addEventListener("click",()=>$("fMulti").click());
+$("fMulti").addEventListener("change",e=>{
+  const fs=[...e.target.files];e.target.value="";
+  fs.slice(0,5).forEach((f,i)=>setTimeout(()=>readJson(f,null),i*40));
+});
+$("btnClearAll").addEventListener("click",()=>{SL.forEach(s=>{if(s.data)clearSlot(s);});});
+/* ウィンドウへのドラッグ＆ドロップ */
+["dragover","drop"].forEach(ev=>window.addEventListener(ev,e=>e.preventDefault()));
+window.addEventListener("drop",e=>{
+  const fs=[...(e.dataTransfer?e.dataTransfer.files:[])];
+  const js=fs.filter(f=>/\.(json|csv)$/i.test(f.name));
+  const vd=fs.find(f=>/^video\//.test(f.type));
+  js.slice(0,5).forEach((f,i)=>setTimeout(()=>readJson(f,null),i*40));
+  if(vd)setVideo(vd);
+});
+
+/* ================= 比較テーブル(摩擦円の右) ================= */
+function layoutCircles(){
+  const list=shownSL(),tb=$("cmpTbl");
+  $("cmpEmpty").style.display=list.length?"none":"block";
+  if(!list.length){
+    $("cmpEmpty").textContent=loadedSL().length?
+      "表示するデータがありません(左の一覧のチェックで表示を切り替えます)":
+      ".json ファイルを読み込むと、1つの摩擦円に全走行(最大5本)を色分けして重ねて表示します。";
+    tb.innerHTML="";sizeAll();render(P.t);return;
+  }
+  let h="<colgroup><col style='width:25%'><col style='width:11%'><col style='width:12.8%'>"+
+        "<col style='width:12.8%'><col style='width:12.8%'><col style='width:12.8%'><col style='width:12.8%'></colgroup>"+
+        "<tr><th class='nm'>データ</th><th>摩擦円使用率</th><th>%</th>"+
+        "<th>km/h</th><th>前後G</th><th>横G</th><th>縦G</th></tr>";
+  for(const sl of list){
+    h+="<tr data-k='"+sl.k+"'>"+
+       "<td class='nm' style='color:"+sl.col+"' title='"+escH(sl.file)+"'>"+
+         "<span>"+escH(sl.k+" "+sl.file)+"</span></td>"+
+       "<td><div class='bar'><i style='background:"+sl.col+"'></i><u></u></div></td>"+
+       "<td class='use'>--</td><td>--</td><td>--</td><td>--</td><td>--</td></tr>";
+  }
+  tb.innerHTML=h;
+  for(const sl of list){
+    const tr=tb.querySelector("tr[data-k='"+sl.k+"']"),td=tr.children;
+    sl.m={row:tr,bar:tr.querySelector(".bar i"),use:td[2],spd:td[3],
+      lon:td[4],lat:td[5],vrt:td[6]};
+  }
+  sizeAll();buildHist();render(P.t);
+}
+/* 全体の軌跡: 表示中の全データを1枚の履歴レイヤーに重ねて描く */
+function buildHist(){
+  GG.clearHist();
+  if(!$("chkHist").checked)return;
+  const list=shownSL();
+  const op=list.length>=4?0.20:list.length>=2?0.24:0.30;  // 本数が多いほど薄く
+  for(const sl of list){
+    const S=sl.data.S||sl.data.samples,step=Math.max(1,Math.ceil(S.length/4000));
+    const c="rgba("+sl.rgb+","+op+")";
+    for(let i=step;i<S.length;i+=step)
+      GG.histSeg([S[i-step][1],S[i-step][2]],[S[i][1],S[i][2]],c);
+  }
+}
+$("chkHist").addEventListener("change",()=>{buildHist();GG.redraw();});
+$("chkTrail").addEventListener("change",()=>render(P.t));
+/* 摩擦円の大きさ: 上段の高さと幅の半分の小さい方 */
+function sizeAll(){
+  const box=$("topPane"),main=$("leftPane");
+  const hAvail=Math.max(200,Math.floor(main.clientHeight*0.46));
+  const wAvail=Math.max(160,box.clientWidth-16);
+  const s=Math.max(150,Math.min(hAvail-16,Math.floor(wAvail*0.45),440));
+  box.style.height=(s+16)+"px";
+  GG.setSize(s);
+  // 比較テーブルの幅が狭いときは文字を小さく(値が重ならないように)
+  $("cmpBox").classList.toggle("narrow",$("cmpBox").clientWidth<430);
+  // 表が円より縦に長いときは、上段を少しだけ広げて全部見えるようにする
+  const need=$("cmpHead").offsetHeight+$("cmpWrap").scrollHeight+16;
+  // グラフ側に最低280pxは残す
+  const cap=main.clientHeight?
+    Math.min(Math.floor(main.clientHeight*0.58),main.clientHeight-280):9999;
+  box.style.height=Math.max(s+16,Math.min(cap,need))+"px";
+  sizeCharts();
+  if(gmap&&window.google)google.maps.event.trigger(gmap,"resize");
+  if(lmap)setTimeout(()=>lmap.invalidateSize(),30);
+}
+window.addEventListener("resize",()=>{sizeAll();buildCharts();render(P.t);});
+
+/* ================= 平滑化・統計 ================= */
+function applySmooth(){
+  for(const sl of loadedSL())
+    sl.data.S=smoothArr(sl.data.samples,sl.data.rate,view.smooth);
+  buildHist();
+  buildCharts();updStats();render(P.t);
+}
+function updStats(){
+  const tb=$("statsTbl"),rows=loadedSL();
+  if(!rows.length){tb.innerHTML="";$("statsWrap").style.display="none";return;}
+  $("statsWrap").style.display="block";
+  let h="<tr><th>データ</th><th>時間</th><th>最大G</th><th>最大縦G</th>"+
+        "<th>最高速</th><th>平均使用率</th><th>90%超</th></tr>";
+  for(const sl of rows){
+    const S=sl.data.S||sl.data.samples,mg=effMaxG(sl);
+    let mx=0,sum=0,hi=0;
+    for(const s of S){const g=Math.hypot(s[1],s[2]);if(g>mx)mx=g;sum+=g;if(g/mg>=0.9)hi++;}
+    let vp=null;
+    for(const s of sl.data.samples){const z=vrtOf(s);
+      if(z!=null&&(vp==null||Math.abs(z)>Math.abs(vp)))vp=z;}
+    let sp=0;for(const p of(sl.data.gps||[]))if(p[3]!=null&&p[3]>sp)sp=p[3];
+    h+="<tr><td class='nm' style='color:"+sl.col+"' title='"+escH(sl.file)+"'>"+
+       escH(sl.k+" "+sl.file)+"</td>"+
+       "<td>"+fmtMS(S[S.length-1][0])+"</td>"+
+       "<td>"+mx.toFixed(2)+"G</td>"+
+       "<td>"+(vp!=null?(vp>=0?"+":"")+vp.toFixed(2):"-")+"</td>"+
+       "<td>"+(sp?Math.round(sp):"-")+"</td>"+
+       "<td>"+Math.round(sum/S.length/mg*100)+"%</td>"+
+       "<td>"+Math.round(hi/(sl.data.rate||25))+"s</td></tr>";
+  }
+  tb.innerHTML=h;
+}
+
+/* ================= 時系列グラフ ================= */
+const CHDEF={
+  use:{label:"摩擦円使用率 %",u:"%",fx:0},
+  spd:{label:"速度 km/h",u:"km/h",fx:0},
+  lon:{label:"前後G (+加速/-減速)",u:"G",fx:2},
+  lat:{label:"横G (+右/-左)",u:"G",fx:2},
+  vrt:{label:"縦G (+上/-下・段差)",u:"G",fx:2},
+  yaw:{label:"ヨーレート °/s (+右回り)",u:"°/s",fx:1},
+  slip:{label:"スリップアングル ° (+右)",u:"°",fx:1}
+};
+function chVal(sl,key,t){
+  const d=sl.data;
+  if(t<0||t>sl.dur)return null;
+  if(key==="spd"){const p=posOf(d.gps,t);return(p&&p.spd!=null)?p.spd:null;}
+  if(key==="yaw"){const s=d.samples[idxAt(d.samples,t)];return s.length>3?s[3]:null;}
+  if(key==="vrt"){const s=d.samples[idxAt(d.samples,t)];return vrtOf(s);}
+  if(key==="slip"){const s=slipOf(sl,t);return s?s.slip:null;}
+  const S=d.S||d.samples,s=S[idxAt(S,t)];
+  if(key==="use")return Math.hypot(s[1],s[2])/effMaxG(sl)*100;
+  if(key==="lat")return s[1];
+  if(key==="lon")return s[2];
+  return null;
+}
+function chRange(key){
+  const list=shownSL();
+  if(key==="use")return{min:0,max:120,zero:false};
+  if(key==="spd"){
+    let mx=0;
+    for(const sl of list)for(const p of(sl.data.gps||[]))if(p[3]!=null&&p[3]>mx)mx=p[3];
+    return{min:0,max:Math.max(20,Math.ceil(mx/20)*20),zero:false};
+  }
+  let mx=0;
+  if(key==="slip"){
+    for(const sl of list){const S=sl.data.SLIP;if(!S)continue;
+      for(const v of S){const x=Math.abs(v[1]);if(x>mx)mx=x;}}
+    const m=Math.max(5,Math.ceil(mx/5)*5);return{min:-m,max:m,zero:true};
+  }
+  const ix=key==="lat"?1:key==="lon"?2:key==="vrt"?4:3;
+  for(const sl of list){
+    const A=(key==="yaw"||key==="vrt")?sl.data.samples:(sl.data.S||sl.data.samples);
+    for(const v of A){const x=Math.abs(v[ix]||0);if(x>mx)mx=x;}
+  }
+  const step=key==="yaw"?10:key==="vrt"?0.25:0.5;
+  const m=Math.max(step,Math.ceil(mx/step)*step);
+  return{min:-m,max:m,zero:true};
+}
+/* グラフ横軸: 開始補正を含めて一番遠くまで伸びるデータに合わせる */
+function chartDur(){
+  let d=1;
+  for(const sl of shownSL()){const e=sl.dur+sl.off*1000;if(e>d)d=e;}
+  return Math.max(1,d);
+}
+const chd=()=>CH.dur||1;
+const CH={dur:1,list:[]};
+function sizeCharts(){
+  const d=devicePixelRatio||1;
+  for(let n=0;n<3;n++){
+    const cv=$("strip"+n);
+    const w=Math.max(50,cv.clientWidth),h=Math.max(40,cv.clientHeight);
+    if(cv.width!==Math.round(w*d)||cv.height!==Math.round(h*d)){
+      cv.width=Math.round(w*d);cv.height=Math.round(h*d);
+    }
+  }
+}
+function tickStep(dur){ // 時間軸の目盛り間隔[ms]
+  const c=[1,2,5,10,15,30,60,120,300,600,900,1800];
+  for(const s of c)if(dur/1000/s<=10)return s*1000;
+  return 3600000;
+}
+function buildCharts(){
+  sizeCharts();
+  CH.dur=chartDur();CH.list=[];
+  const list=shownSL(),d=devicePixelRatio||1;
+  for(let n=0;n<3;n++){
+    const cv=$("strip"+n),key=view.charts[n];
+    const W=cv.width,H=cv.height;
+    const off=document.createElement("canvas");off.width=W;off.height=H;
+    const c=off.getContext("2d");
+    c.fillStyle="#1d242f";c.fillRect(0,0,W,H);
+    const rg=chRange(key);
+    const top=17*d,bot=H-13*d;
+    const yOf=v=>{const cl=Math.max(rg.min,Math.min(rg.max,v));
+      return bot-(cl-rg.min)/(rg.max-rg.min)*(bot-top);};
+    // 時間軸の目盛り
+    const ts=tickStep(CH.dur);
+    c.strokeStyle="#26303f";c.lineWidth=1*d;c.fillStyle="#5f6c7d";c.font=(9*d)+"px sans-serif";
+    for(let t=0;t<=CH.dur;t+=ts){
+      const x=t/CH.dur*W;
+      c.beginPath();c.moveTo(x,top-4*d);c.lineTo(x,bot);c.stroke();
+      c.fillText(fmtMS(t),Math.min(W-26*d,x+3*d),H-3*d);
+    }
+    if(rg.zero){c.strokeStyle="#3a4557";c.lineWidth=1*d;
+      c.beginPath();c.moveTo(0,yOf(0));c.lineTo(W,yOf(0));c.stroke();}
+    const base=rg.zero?0:rg.min;
+    for(const sl of list){
+      const solo=list.length===1;
+      const pts=[];
+      c.strokeStyle=sl.col;c.lineWidth=1.6*d;c.beginPath();let pen=false;
+      for(let x=0;x<W;x+=2){
+        const t=x/W*CH.dur-sl.off*1000;
+        const v=chVal(sl,key,t);
+        if(v==null){pen=false;continue;}
+        const y=yOf(v);
+        pen?c.lineTo(x,y):c.moveTo(x,y);pen=true;
+        if(solo)pts.push([x,y]);
+      }
+      c.stroke();
+      if(solo&&pts.length>1){    // 1本だけのときは塗りつぶして見やすく
+        c.beginPath();c.moveTo(pts[0][0],yOf(base));
+        for(const p of pts)c.lineTo(p[0],p[1]);
+        c.lineTo(pts[pts.length-1][0],yOf(base));
+        c.closePath();c.fillStyle="rgba("+sl.rgb+",0.16)";c.fill();
+      }
+    }
+    if(key==="use"){
+      c.strokeStyle="#f43f5e";c.setLineDash([4*d,4*d]);c.lineWidth=1*d;
+      c.beginPath();c.moveTo(0,yOf(100));c.lineTo(W,yOf(100));c.stroke();c.setLineDash([]);
+    }
+    if(key==="vrt"){          // 段差トリガのしきい値を目安線として表示
+      const th=[];
+      if(view.trig.start==="vert")th.push(view.trig.startVert);
+      if(view.trig.stop==="vert")th.push(view.trig.stopVert);
+      c.strokeStyle="#f43f5e";c.setLineDash([4*d,4*d]);c.lineWidth=1*d;
+      for(const v of th){c.beginPath();c.moveTo(0,yOf(v));c.lineTo(W,yOf(v));
+        c.moveTo(0,yOf(-v));c.lineTo(W,yOf(-v));c.stroke();}
+      c.setLineDash([]);
+    }
+    c.fillStyle="#8a98a8";c.font="bold "+(10*d)+"px sans-serif";
+    const sc=rg.zero?"±"+rg.max:rg.min+"〜"+rg.max;
+    c.fillText(CHDEF[key].label+"  ["+sc+"]",7*d,12*d);
+    CH.list.push({cv,off,key,yOf,rg});
+  }
+  drawCharts(P.t);
+}
+const SELFILL=sl=>"rgba("+sl.rgb+",0.20)";
+function drawCharts(t){
+  if(!CH.list.length)return;
+  const d=devicePixelRatio||1;
+  for(const ch of CH.list){
+    const c=ch.cv.getContext("2d"),W=ch.cv.width,H=ch.cv.height;
+    c.drawImage(ch.off,0,0);
+    if(SEL.on&&SEL.slot){
+      const x0=Math.min(SEL.t0,SEL.t1)/chd()*W,x1=Math.max(SEL.t0,SEL.t1)/chd()*W;
+      c.fillStyle=SELFILL(SEL.slot);c.fillRect(x0,0,x1-x0,H);
+      c.strokeStyle=SEL.slot.col;c.lineWidth=1.5*d;
+      c.beginPath();c.moveTo(x0,0);c.lineTo(x0,H);c.moveTo(x1,0);c.lineTo(x1,H);c.stroke();
+    }
+    if($("trigMark").checked){
+      let row=0;
+      for(const sl of shownSL()){
+        const tg=sl.trig;if(!tg)continue;
+        const ofs=sl.off*1000,base=sl.trim?sl.trim[0]:0;
+        const ly=H-15*d-row*10*d;row++;
+        const mark=(tv,txt)=>{
+          if(tv==null)return;
+          const x=(tv-base+ofs)/chd()*W;
+          if(x<0||x>W)return;
+          c.strokeStyle=sl.col;c.lineWidth=1.5*d;c.setLineDash([3*d,3*d]);
+          c.beginPath();c.moveTo(x,0);c.lineTo(x,H);c.stroke();c.setLineDash([]);
+          c.fillStyle=sl.col;c.font="bold "+(9*d)+"px sans-serif";
+          c.fillText(txt,Math.min(W-18*d,x+2*d),ly);
+        };
+        mark(tg.st,sl.k+"開");mark(tg.ed,sl.k+"終");
+      }
+    }
+    const x=t/chd()*W;
+    c.strokeStyle="#fbbf24";c.lineWidth=2*d;
+    c.beginPath();c.moveTo(x,0);c.lineTo(x,H);c.stroke();
+  }
+}
+/* グラフの表示項目セレクト(左レールとグラフ上の両方) */
+function fillChPicks(){
+  document.querySelectorAll(".chPick").forEach(s=>{
+    const n=+s.dataset.n;
+    s.innerHTML=Object.keys(CHDEF).map(k=>
+      '<option value="'+k+'">'+CHDEF[k].label.split(" ")[0]+'</option>').join("");
+    s.value=view.charts[n];
+    s.addEventListener("change",e=>{
+      view.charts[n]=e.target.value;saveCfg();
+      document.querySelectorAll('.chPick[data-n="'+n+'"]').forEach(o=>o.value=e.target.value);
+      buildCharts();
+    });
+  });
+}
+/* ---- グラフ上の操作: クリックでシーク / ドラッグで表示範囲の選択 ---- */
+const SEL={on:false,slot:null,t0:0,t1:0,drag:null};
+function refreshSelTgt(){
+  const s=$("selTgt"),cur=s.value;
+  s.innerHTML='<option value="">しない(クリックで移動)</option>'+
+    loadedSL().map(sl=>'<option value="'+sl.k+'">'+sl.k+" "+escH(sl.file)+'</option>').join("");
+  s.value=loadedSL().some(sl=>sl.k===cur)?cur:"";
+  setSelMode(!!s.value);
+}
+function setSelMode(on){
+  [0,1,2].forEach(i=>$("strip"+i).classList.toggle("selMode",on));
+  SEL.on=on;SEL.slot=on?byKey($("selTgt").value):null;
+  if(!on){SEL.t0=SEL.t1=0;}
+  drawCharts(P.t);
+}
+$("selTgt").addEventListener("change",()=>setSelMode(!!$("selTgt").value));
+$("btnTrimReset").addEventListener("click",()=>{
+  const sl=byKey($("selTgt").value);
+  if(!sl||!sl.data){
+    if(!loadedSL().length)return;
+    loadedSL().forEach(s=>setTrimRange(s,0,+s.el.t1.max));return;
+  }
+  setTrimRange(sl,0,+sl.el.t1.max);
+});
+const stripT=(cv,e)=>{const r=cv.getBoundingClientRect();
+  return Math.max(0,Math.min(chd(),(e.clientX-r.left)/r.width*chd()));};
+[0,1,2].forEach(n=>{
+  const cv=$("strip"+n),tip=$("tip"+n),box=cv.parentElement;
+  cv.addEventListener("pointerdown",e=>{
+    if(!loadedSL().length)return;
+    const sl=SEL.on?byKey($("selTgt").value):null;
+    if(sl&&sl.data){e.preventDefault();
+      const t=stripT(cv,e);SEL.slot=sl;SEL.t0=t;SEL.t1=t;SEL.drag=cv;drawCharts(P.t);}
+    else{SEL.drag=null;dragSeek=cv;seek(stripT(cv,e));}
+  });
+  box.addEventListener("mousemove",e=>{
+    if(!loadedSL().length){tip.style.display="none";return;}
+    const t=stripT(cv,e),key=view.charts[n];
+    let h='<b style="color:var(--accent2)">'+fmtMSf(t)+'</b>';
+    for(const sl of shownSL()){
+      const v=chVal(sl,key,t-sl.off*1000);
+      h+='<br><span style="color:'+sl.col+'">'+sl.k+"</span> "+
+        (v==null?"--":v.toFixed(CHDEF[key].fx)+CHDEF[key].u);
+    }
+    tip.innerHTML=h;tip.style.display="block";
+    const r=box.getBoundingClientRect(),tw=tip.offsetWidth;
+    let x=e.clientX-r.left+12;
+    if(x+tw>r.width)x=e.clientX-r.left-tw-12;
+    tip.style.left=Math.max(0,x)+"px";tip.style.top="4px";
+  });
+  box.addEventListener("mouseleave",()=>{tip.style.display="none";});
+});
+let dragSeek=null;
+window.addEventListener("pointermove",e=>{
+  if(SEL.drag){SEL.t1=stripT(SEL.drag,e);drawCharts(P.t);}
+  else if(dragSeek)seek(stripT(dragSeek,e));
+});
+window.addEventListener("pointerup",()=>{
+  if(SEL.drag){
+    const sl=SEL.slot,a=Math.min(SEL.t0,SEL.t1),b=Math.max(SEL.t0,SEL.t1);
+    SEL.drag=null;
+    if(b-a<300)drawCharts(P.t);          // ほぼクリック → 選択とみなさない
+    else{
+      const ofs=sl.off*1000,base=sl.trim?sl.trim[0]:0;
+      SEL.t0=SEL.t1=0;
+      setTrimRange(sl,base+a-ofs,base+b-ofs);
+    }
+  }
+  dragSeek=null;
+});
+
+/* ================= 地図 (Googleマップ / OpenStreetMap) ================= */
+let gmap=null,lmap=null,mapKind="none";
+let gPolys=[],gMarks={},lLayers=[],lMarks={};
+let lastMapDraw=0,lastRot={};
+const usageOf=(sl,t)=>{const S=sl.data.S||sl.data.samples,s=S[idxAt(S,t)];
+  return Math.hypot(s[1],s[2])/effMaxG(sl);};
+const gpsSlots=()=>shownSL().filter(s=>s.data.gps&&s.data.gps.length>1);
+function mapNote(t){const e=$("mapNote");e.innerHTML=t?t+
+  '<span style="color:var(--ink3);float:right;margin-left:8px">(クリックで閉じる)</span>':"";
+  e.style.display=t?"block":"none";}
+$("mapNote").addEventListener("click",()=>mapNote(""));
+function initMap(){
+  // 表示直後でまだ大きさが決まっていないときは、決まってから地図を作る
+  if(!$("mapBox").clientWidth||!$("mapBox").clientHeight){setTimeout(initMap,200);return;}
+  if(view.gkey){loadGoogle(view.gkey);return;}
+  mapNote("Googleマップを使うには右上の<b>「Googleマップ設定」</b>からAPIキーを登録してください。"+
+    "現在は OpenStreetMap(キー不要)で表示しています。");
+  initLeaflet();
+}
+function loadGoogle(key){
+  if(window.google&&window.google.maps){onGoogleReady();return;}
+  mapNote("Googleマップを読み込んでいます…");
+  const s=document.createElement("script");
+  s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+
+        "&v=weekly&language=ja&region=JP&callback=__gmReady";
+  s.async=true;
+  s.onerror=()=>{mapNote("Googleマップを読み込めませんでした。OpenStreetMapで表示します。");initLeaflet();};
+  document.head.appendChild(s);
+}
+window.__gmReady=()=>onGoogleReady();
+window.gm_authFailure=()=>{
+  mapNote("GoogleマップのAPIキーが無効か、権限がありません。OpenStreetMapで表示します。");
+  mapKind="none";$("gmap").style.display="none";initLeaflet();
+};
+function onGoogleReady(){
+  if(lmap){lmap.remove();lmap=null;$("lmap").style.display="none";}
+  $("gmap").style.display="block";
+  gmap=new google.maps.Map($("gmap"),{
+    center:{lat:36.5645,lng:139.9005},zoom:15,
+    mapTypeId:view.mapType,tilt:0,
+    mapTypeControl:true,streetViewControl:true,fullscreenControl:true,
+    scaleControl:true,zoomControl:true,
+    gestureHandling:"greedy",
+    styles:[{elementType:"labels.icon",stylers:[{visibility:"off"}]}]
+  });
+  gmap.addListener("maptypeid_changed",()=>{
+    view.mapType=gmap.getMapTypeId();$("mapType").value=view.mapType;saveCfg();});
+  mapKind="google";mapNote("");
+  buildMap();
+}
+function initLeaflet(){
+  if(!window.L){mapNote("地図ライブラリを読み込めませんでした(オフライン?)");return;}
+  if(gmap){gmap=null;$("gmap").style.display="none";}
+  $("lmap").style.display="block";
+  if(lmap)lmap.remove();
+  lmap=L.map($("lmap"),{zoomControl:true});
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {maxZoom:19,attribution:"© OpenStreetMap"}).addTo(lmap);
+  lmap.setView([36.5645,139.9005],15);
+  mapKind="leaflet";
+  setTimeout(()=>lmap.invalidateSize(),60);
+  buildMap();
+}
+function clearMapLayers(){
+  gPolys.forEach(p=>p.setMap(null));gPolys=[];
+  Object.values(gMarks).forEach(m=>m.setMap(null));gMarks={};
+  if(lmap){lLayers.forEach(l=>lmap.removeLayer(l));
+    Object.values(lMarks).forEach(m=>lmap.removeLayer(m));}
+  lLayers=[];lMarks={};lastRot={};
+}
+function arrowSvg(col){
+  return "<svg viewBox='0 0 24 24' width='26' height='26'>"+
+    "<path d='M12 2 L19 20 L12 15.5 L5 20 Z' fill='"+col+"' stroke='#fff' stroke-width='1.5'/></svg>";
+}
+function buildMap(){
+  clearMapLayers();
+  const list=gpsSlots();
+  updLegend(list);
+  if(!list.length)return;
+  const solo=list.length===1;
+  if(mapKind==="google"&&gmap){
+    const bounds=new google.maps.LatLngBounds();
+    for(const sl of list){
+      const path=sl.data.gps.map(p=>({lat:p[1],lng:p[2]}));
+      path.forEach(p=>bounds.extend(p));
+      if(solo){                       // 単独表示: 使用率で色分け
+        let cur=[],cb=-1;
+        const flush=()=>{if(cur.length>1)gPolys.push(new google.maps.Polyline(
+          {path:cur,strokeColor:BCOL[cb],strokeWeight:5,strokeOpacity:.95,map:gmap}));};
+        for(const p of sl.data.gps){
+          const u=usageOf(sl,p[0]),b=u<0.6?0:u<0.85?1:2;
+          if(b!==cb&&cur.length){flush();cur=[cur[cur.length-1]];}
+          cb=b;cur.push({lat:p[1],lng:p[2]});
+        }
+        flush();
+      }else{
+        gPolys.push(new google.maps.Polyline(
+          {path,strokeColor:sl.col,strokeWeight:4,strokeOpacity:.9,map:gmap}));
+      }
+      gMarks[sl.k]=new google.maps.Marker({position:path[0],map:gmap,zIndex:20,title:sl.k+" "+sl.file,
+        icon:{path:google.maps.SymbolPath.FORWARD_CLOSED_ARROW,scale:5.5,rotation:0,
+          fillColor:sl.col,fillOpacity:1,strokeColor:"#ffffff",strokeWeight:1.5}});
+    }
+    gmap.fitBounds(bounds,28);
+    // 走行範囲が極端に狭いときは寄りすぎないように補正
+    google.maps.event.addListenerOnce(gmap,"bounds_changed",()=>{
+      if(gmap.getZoom()>19)gmap.setZoom(19);});
+  }else if(mapKind==="leaflet"&&lmap){
+    let all=[];
+    for(const sl of list){
+      const path=sl.data.gps.map(p=>[p[1],p[2]]);
+      all=all.concat(path);
+      if(solo){
+        let cur=[],cb=-1;
+        const flush=()=>{if(cur.length>1)lLayers.push(
+          L.polyline(cur,{color:BCOL[cb],weight:5,opacity:.95}).addTo(lmap));};
+        for(const p of sl.data.gps){
+          const u=usageOf(sl,p[0]),b=u<0.6?0:u<0.85?1:2;
+          if(b!==cb&&cur.length){flush();cur=[cur[cur.length-1]];}
+          cb=b;cur.push([p[1],p[2]]);
+        }
+        flush();
+      }else lLayers.push(L.polyline(path,{color:sl.col,weight:4,opacity:.9}).addTo(lmap));
+      lMarks[sl.k]=L.marker(path[0],{icon:L.divIcon({className:"",iconSize:[26,26],
+        iconAnchor:[13,13],html:"<div id='arw_"+sl.k+"' style='width:26px;height:26px'>"+
+        arrowSvg(sl.col)+"</div>"})}).addTo(lmap);
+    }
+    if(all.length)lmap.fitBounds(all,{padding:[16,16]});
+  }
+}
+function updLegend(list){
+  const box=$("mapLegend");
+  if(!list||!list.length){box.style.display="none";return;}
+  let h="";
+  if(list.length===1){
+    h='<div style="color:#9aa7b8;margin-bottom:2px">'+escH(list[0].k+" "+list[0].file)+'</div>'+
+      '<div class="lg"><span class="bar" style="background:'+BCOL[0]+'"></span>使用率 60%未満</div>'+
+      '<div class="lg"><span class="bar" style="background:'+BCOL[1]+'"></span>60〜85%</div>'+
+      '<div class="lg"><span class="bar" style="background:'+BCOL[2]+'"></span>85%以上</div>';
+  }else{
+    h=list.map(sl=>'<div class="lg"><span class="bar" style="background:'+sl.col+'"></span>'+
+      escH(sl.k+" "+sl.file)+'</div>').join("");
+  }
+  box.innerHTML=h;box.style.display="block";
+}
+/* 現在位置マーカーの更新(描画負荷を抑えるため25fpsに間引く) */
+function updateMapMarkers(t,force){
+  const now=performance.now();
+  if(!force&&now-lastMapDraw<40)return;
+  lastMapDraw=now;
+  let firstPos=null;
+  for(const sl of gpsSlots()){
+    const ts=t-sl.off*1000;
+    const p=posOf(sl.data.gps,Math.max(0,Math.min(sl.dur,ts)));
+    if(!p)continue;
+    const sp=slipOf(sl,Math.max(0,Math.min(sl.dur,ts)));
+    const hd=sp?sp.hd:0;
+    if(!firstPos)firstPos=p;
+    if(mapKind==="google"&&gMarks[sl.k]){
+      gMarks[sl.k].setPosition({lat:p.lat,lng:p.lon});
+      const r=Math.round(hd/3);
+      if(lastRot[sl.k]!==r){
+        lastRot[sl.k]=r;
+        const ic=gMarks[sl.k].getIcon();ic.rotation=hd;gMarks[sl.k].setIcon(ic);
+      }
+    }else if(mapKind==="leaflet"&&lMarks[sl.k]){
+      lMarks[sl.k].setLatLng([p.lat,p.lon]);
+      const el=document.getElementById("arw_"+sl.k);
+      if(el)el.style.transform="rotate("+hd.toFixed(0)+"deg)";
+    }
+  }
+  if(firstPos){
+    $("btnGmapOpen").href="https://www.google.com/maps/search/?api=1&query="+
+      firstPos.lat.toFixed(6)+","+firstPos.lon.toFixed(6);
+    if($("chkFollow").checked&&(P.playing||force)){
+      if(mapKind==="google"&&gmap)gmap.panTo({lat:firstPos.lat,lng:firstPos.lon});
+      else if(mapKind==="leaflet"&&lmap)lmap.panTo([firstPos.lat,firstPos.lon],{animate:false});
+    }
+  }
+}
+$("mapType").addEventListener("change",e=>{
+  view.mapType=e.target.value;saveCfg();
+  if(mapKind==="google"&&gmap)gmap.setMapTypeId(view.mapType);
+  else mapNote("地図の種類の切り替えはGoogleマップのときだけ使えます。");
+});
+$("btnZoomIn").addEventListener("click",()=>{
+  if(mapKind==="google"&&gmap)gmap.setZoom(gmap.getZoom()+1);else if(lmap)lmap.zoomIn();});
+$("btnZoomOut").addEventListener("click",()=>{
+  if(mapKind==="google"&&gmap)gmap.setZoom(gmap.getZoom()-1);else if(lmap)lmap.zoomOut();});
+$("btnFit").addEventListener("click",()=>buildMap());
+$("chkFollow").addEventListener("change",e=>{view.follow=e.target.checked;saveCfg();});
+$("btnMapMax").addEventListener("click",()=>{
+  document.body.classList.toggle("mapmax");
+  const on=document.body.classList.contains("mapmax");
+  $("btnMapMax").textContent=on?"元のレイアウトに戻す":"地図を最大化";
+  setTimeout(()=>{sizeAll();buildCharts();render(P.t);buildMap();},60);
+});
+/* Googleマップ APIキーの設定 */
+$("btnKey").addEventListener("click",()=>{$("keyIn").value=view.gkey||"";$("dlgKey").showModal();});
+$("btnKeyClose").addEventListener("click",()=>$("dlgKey").close());
+$("btnKeySave").addEventListener("click",()=>{
+  view.gkey=$("keyIn").value.trim();saveCfg();$("dlgKey").close();
+  if(view.gkey){
+    if(window.google&&window.google.maps)onGoogleReady();
+    else if(document.querySelector('script[src*="maps.googleapis.com"]'))
+      location.reload();      // 別のキーで読み直すにはリロードが必要
+    else loadGoogle(view.gkey);
+  }else{mapNote("OpenStreetMapで表示しています。");initLeaflet();}
+});
+
+/* ================= 自動トリガの確認 ================= */
+function trigOf(orig,rate){
+  const S=orig&&orig.samples;
+  if(!S||!S.length)return null;
+  const g=orig.gps||[];
+  const spdAt=t=>{const p=posOf(g,t);return(p&&p.spd!=null)?p.spd:null;};
+  const end=S[S.length-1][0],T=view.trig,vert=hasVrt(S);
+  let st=0;
+  if(T.start==="speed"){st=null;
+    for(const v of S){const sp=spdAt(v[0]);if(sp!=null&&sp>=T.startSpd){st=v[0];break;}}}
+  else if(T.start==="g"){st=null;
+    for(const v of S)if(Math.hypot(v[1],v[2])>=T.startG){st=v[0];break;}}
+  else if(T.start==="vert"){st=null;
+    for(const v of S){const z=vrtOf(v);if(z!=null&&Math.abs(z)>=T.startVert){st=v[0];break;}}}
+  let ed=end,edFired=false;
+  if(st!=null&&T.stop==="vert"){
+    for(const v of S){
+      if(v[0]<st+T.minSec*1000)continue;
+      const z=vrtOf(v);
+      if(z!=null&&Math.abs(z)>=T.stopVert){ed=v[0];edFired=true;break;}
+    }
+  }
+  if(st!=null&&T.stop==="speed"){
+    const armSpd=Math.max(T.stopSpd+5,T.startSpd);
+    let armed=false,lowT=null;ed=null;
+    for(const v of S){
+      if(v[0]<st)continue;
+      const sp=spdAt(v[0]);if(sp==null)continue;
+      if(sp>=armSpd)armed=true;
+      if(!armed)continue;
+      if(sp<T.stopSpd){
+        if(lowT==null)lowT=v[0];
+        else if(v[0]-lowT>=T.stopSec*1000){ed=v[0];break;}
+      }else lowT=null;
+    }
+    edFired=ed!=null;
+    if(ed==null)ed=end;
+  }
+  return{st,ed,end,edFired,vert};
+}
+function evalTrig(){
+  const box=$("trigRes"),T=view.trig;
+  const txt=[];
+  for(const sl of loadedSL()){
+    const r=trigOf(sl.orig,sl.rate);sl.trig=r;
+    if(!r)continue;
+    const needV=T.start==="vert"||T.stop==="vert";
+    let line;
+    if(needV&&!r.vert)line="縦Gが記録されていません(旧バージョンの記録)";
+    else if(r.st==null)line="開始条件に達しませんでした";
+    else{
+      line="開始 "+fmtMSf(r.st)+" → 終了 "+fmtMSf(r.ed)+" / 全体 "+fmtMSf(r.end);
+      if(T.stop!=="manual")
+        line+=r.edFired?" ─ 区間タイム "+lapText(r.ed-r.st):
+              " ─ 終了条件に達せず(末尾まで "+lapText(r.ed-r.st)+")";
+    }
+    txt.push('<span style="color:'+sl.col+'">'+escH(sl.k+" "+sl.file)+"</span>: "+escH(line));
+  }
+  box.innerHTML=txt.length?txt.join("<br>"):"データを読み込むと判定できます。";
+  drawCharts(P.t);
+}
+function applyTrig(){
+  let n=0;
+  for(const sl of loadedSL()){
+    const t=sl.trig;
+    if(!t||t.st==null)continue;
+    setTrimRange(sl,t.st,t.ed);n++;
+  }
+  if(!n)alert("切り出せる範囲がありません(開始条件に達していません)");
+}
+function syncTrigUI(){
+  const T=view.trig;
+  $("trigSt").value=T.start;$("trigEd").value=T.stop;
+  $("trigStSpd").value=T.startSpd;$("trigStG").value=T.startG;$("trigStVert").value=T.startVert;
+  $("trigEdSpd").value=T.stopSpd;$("trigEdSec").value=T.stopSec;$("trigEdVert").value=T.stopVert;
+  $("trigMinSec").value=T.minSec;
+}
+const bindTrig=(id,fn)=>$(id).addEventListener("change",e=>{fn(e.target.value);saveCfg();
+  syncTrigUI();evalTrig();buildCharts();});
+bindTrig("trigSt",v=>view.trig.start=v);
+bindTrig("trigEd",v=>view.trig.stop=v);
+bindTrig("trigStSpd",v=>view.trig.startSpd=Math.max(3,parseFloat(v)||15));
+bindTrig("trigStG",v=>view.trig.startG=Math.min(1,Math.max(0.1,parseFloat(v)||0.3)));
+bindTrig("trigStVert",v=>view.trig.startVert=Math.min(3,Math.max(0.1,parseFloat(v)||0.35)));
+bindTrig("trigEdSpd",v=>view.trig.stopSpd=Math.max(1,parseFloat(v)||8));
+bindTrig("trigEdSec",v=>view.trig.stopSec=Math.max(2,parseInt(v)||10));
+bindTrig("trigEdVert",v=>view.trig.stopVert=Math.min(3,Math.max(0.1,parseFloat(v)||0.35)));
+bindTrig("trigMinSec",v=>view.trig.minSec=Math.max(0,parseInt(v)||0));
+$("btnTrigCheck").addEventListener("click",evalTrig);
+$("btnTrigApply").addEventListener("click",applyTrig);
+$("trigMark").addEventListener("change",()=>drawCharts(P.t));
+
+/* ================= 再生 ================= */
+const P={t:0,playing:false,speed:1,last:0};
+const vid=$("vid");
+let vidOn=false,seekDrag=false;
+function slotA(){return loadedSL()[0]||null;}
+function vidTimeOf(t){                // グラフ時刻 → 動画の再生位置[s]
+  const a=slotA();if(!a)return 0;
+  const base=a.trim?a.trim[0]:0;
+  return Math.max(0,(t-a.off*1000+base)/1000-view.vofs);
+}
+function timeOfVid(ct){               // 動画の再生位置[s] → グラフ時刻
+  const a=slotA();if(!a)return 0;
+  const base=a.trim?a.trim[0]:0;
+  return(ct+view.vofs)*1000-base+a.off*1000;
+}
+function seek(t){
+  t=Math.max(0,Math.min(chd(),t));
+  if(vidOn){vid.currentTime=vidTimeOf(t);}
+  P.t=t;render(t);updateMapMarkers(t,true);
+}
+function render(t){
+  t=Math.max(0,Math.min(chd(),t||0));
+  P.t=t;
+  const useTrail=$("chkTrail").checked;
+  const series=[];
+  for(const sl of SL){
+    if(!sl.data||!sl.on||!sl.m)continue;
+    const S=sl.data.S||sl.data.samples,ts=t-sl.off*1000;
+    const se={k:sl.k,col:sl.col,rgb:sl.rgb,trail:null,cur:null};
+    if(ts<0||ts>sl.dur){                       // この時刻にはデータが無い
+      sl.m.row.classList.add("off");
+      for(const k of["use","spd","lon","lat","vrt"])sl.m[k].textContent="--";
+      sl.m.bar.style.width="0";
+    }else{
+      sl.m.row.classList.remove("off");
+      const i=idxAt(S,ts);
+      if(useTrail){
+        const trail=[];let j=i;
+        while(j>=0&&ts-S[j][0]<=3000){trail.push([S[j][1],S[j][2],S[j][0]]);j--;}
+        trail.reverse();se.trail=trail;
+      }
+      se.cur=[S[i][1],S[i][2]];
+      const lat=S[i][1],lon=S[i][2];
+      const use=Math.hypot(lat,lon)/effMaxG(sl)*100;
+      sl.m.lat.textContent=sg(lat);
+      sl.m.lon.textContent=sg(lon);
+      sl.m.use.textContent=Math.round(use);
+      sl.m.bar.style.width=Math.min(100,use/120*100).toFixed(1)+"%";
+      const p=posOf(sl.data.gps,ts);
+      sl.m.spd.textContent=(p&&p.spd!=null)?Math.round(p.spd):"--";
+      const z=vrtOf(sl.data.samples[idxAt(sl.data.samples,ts)]);
+      sl.m.vrt.textContent=z!=null?sg(z):"--";
+    }
+    series.push(se);
+  }
+  GG.series=series;GG.redraw();
+  $("cmpClock").textContent=fmtMSf(t);
+  drawCharts(t);
+  updateMapMarkers(t);
+  const s=t/1000;
+  $("clock").textContent=Math.floor(s/60)+":"+(s%60).toFixed(1).padStart(4,"0")+
+    " / "+fmtMSf(chd());
+  if(!seekDrag)$("seek").value=Math.round(t/chd()*1000);
+}
+$("btnPlay").addEventListener("click",()=>{
+  if(!loadedSL().length)return;
+  if(vidOn){vid.paused?vid.play():vid.pause();return;}
+  P.playing=!P.playing;P.last=performance.now();
+  if(P.playing&&P.t>=chd())P.t=0;
+});
+$("rpSpeed").addEventListener("change",e=>{
+  P.speed=parseFloat(e.target.value);vid.playbackRate=P.speed;});
+$("seek").addEventListener("pointerdown",()=>seekDrag=true);
+window.addEventListener("pointerup",()=>{seekDrag=false;});
+$("seek").addEventListener("input",e=>seek(+e.target.value/1000*chd()));
+document.addEventListener("keydown",e=>{
+  if(/input|textarea|select/i.test(e.target.tagName))return;
+  if(e.code==="Space"){e.preventDefault();$("btnPlay").click();}
+  else if(e.key==="ArrowRight")seek(P.t+(e.shiftKey?1000:100));
+  else if(e.key==="ArrowLeft")seek(P.t-(e.shiftKey?1000:100));
+  else if(e.key==="Home")seek(0);
+  else if(e.key==="End")seek(chd());
+});
+function loop(){
+  requestAnimationFrame(loop);
+  if(!loadedSL().length)return;
+  const now=performance.now();
+  if(vidOn){
+    P.playing=!vid.paused&&!vid.ended;
+    const t=timeOfVid(vid.currentTime);
+    if(P.playing||Math.abs(t-P.t)>20)render(Math.max(0,Math.min(chd(),t)));
+  }else if(P.playing){
+    // 他のタブに切り替えている間は描画が止まるので、1フレームの進みは0.1秒までに制限
+    P.t=Math.min(chd(),P.t+Math.min(100,now-P.last)*P.speed);
+    if(P.t>=chd())P.playing=false;
+    render(P.t);
+  }
+  P.last=now;
+  $("btnPlay").textContent=P.playing?"❚❚ 一時停止":"▶ 再生";
+}
+
+/* ================= 動画 ================= */
+function setVideo(f){
+  vid.src=URL.createObjectURL(f);
+  $("vidBox").style.display="block";
+  vid.playbackRate=P.speed;vidOn=true;
+}
+$("btnVideo").addEventListener("click",()=>$("fVideo").click());
+$("fVideo").addEventListener("change",e=>{const f=e.target.files[0];e.target.value="";
+  if(f)setVideo(f);});
+$("btnVideoClr").addEventListener("click",()=>{
+  vid.pause();vid.removeAttribute("src");vid.load();
+  $("vidBox").style.display="none";vidOn=false;P.playing=false;});
+$("vOfs").addEventListener("input",e=>{
+  view.vofs=parseFloat(e.target.value);$("vOfsV").textContent=view.vofs.toFixed(1);saveCfg();});
+
+/* ================= CSV書き出し(全ファイル) ================= */
+const csvQ=v=>{const t=String(v==null?"":v);
+  return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;};
+function buildCsv(){
+  const list=loadedSL();
+  if(!list.length)return null;
+  const anyRaw=list.some(sl=>sl.data.raw&&sl.data.raw.samples&&sl.data.raw.samples.length);
+  const head=["データ","ファイル名","t_s","同期t_s","横G","前後G","縦G","横G_平滑","前後G_平滑",
+    "ヨーレートdps","スリップ角deg","速度kmh","緯度","経度","進行方位deg","使用率%",
+    "車種名","車種最大G","記録日時"];
+  if(anyRaw)head.push("生accX","生accY","生accZ","生rotX","生rotY","生rotZ");
+  const rows=[head.join(",")];
+  for(const sl of list){
+    const S=sl.data.samples,SM=sl.data.S||null,rawS=(sl.data.raw&&sl.data.raw.samples)||null;
+    const mg=effMaxG(sl);
+    const carNm=(sl.data.car&&sl.data.car.name)||"",dt=sl.data.date||"";
+    for(let i=0;i<S.length;i++){
+      const s=S[i],p=posOf(sl.data.gps,s[0])||{},sm=SM?SM[Math.min(i,SM.length-1)]:null;
+      const z=vrtOf(s),sp=slipOf(sl,s[0]);
+      const c=[sl.k,csvQ(sl.file),(s[0]/1000).toFixed(2),((s[0]+sl.off*1000)/1000).toFixed(2),
+        s[1],s[2],(z!=null?z:""),
+        sm?sm[1].toFixed(3):"",sm?sm[2].toFixed(3):"",
+        (s[3]!=null?s[3]:""),(sp?sp.slip.toFixed(1):""),
+        (p.spd!=null?p.spd.toFixed(1):""),
+        (p.lat!=null?p.lat.toFixed(6):""),(p.lon!=null?p.lon.toFixed(6):""),
+        (p.crs!=null?p.crs.toFixed(1):""),
+        (Math.hypot(s[1],s[2])/mg*100).toFixed(1),
+        csvQ(carNm),(sl.data.car&&sl.data.car.maxG)||"",csvQ(isoLocal(dt)||dt)];
+      if(anyRaw){
+        const r=rawS?(rawS[i]&&rawS[i][0]===s[0]?rawS[i]:rawS[idxAt(rawS,s[0])]):null;
+        if(r)for(const v of r.slice(1))c.push(v!=null?v:"");
+        else for(let k=0;k<6;k++)c.push("");
+      }
+      rows.push(c.join(","));
+    }
+  }
+  return rows.join("\n");
+}
+$("btnCsv").addEventListener("click",()=>{
+  const csv=buildCsv();
+  if(csv==null){alert("先にデータ(.json / .csv)を読み込んでください");return;}
+  const src=loadedSL().find(s=>s.data.date);
+  const nm="fc_pc_"+stampOf(src?src.data.date:null)+".csv";
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv"}));
+  a.download=nm;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+});
+
+/* ================= デモデータ ================= */
+function demoStepper(ph){
+  let lat=36.5645,lon=139.9005,hdg=0,v=22,t=0,pv=0;
+  const p=ph||0;
+  return{step(dt){
+    t+=dt;
+    const m=view.maxG,u=t+p;
+    let la=m*0.92*Math.sin(u*0.55)*Math.sin(u*0.21+1.2);
+    let lo=m*0.75*Math.sin(u*0.33+2.1)*Math.cos(u*0.12);
+    la+=(Math.sin(u*7.3)+Math.sin(u*11.1))*0.015;
+    lo+=(Math.sin(u*8.1)+Math.sin(u*12.7))*0.012;
+    const g=Math.hypot(la,lo);
+    if(g>m*1.02){la*=m*1.02/g;lo*=m*1.02/g;}
+    v=Math.max(8,Math.min(52,v+lo*G0*dt));
+    hdg+=la*G0/v*dt;
+    lat+=v*Math.cos(hdg)*dt/111320;
+    lon+=v*Math.sin(hdg)*dt/(111320*Math.cos(lat*Math.PI/180));
+    const sl=12*Math.pow(Math.sin((t+p)*0.8),9);
+    const dsl=(sl-pv)/dt;pv=sl;
+    const yaw=la*G0/v*180/Math.PI+dsl;
+    const course=((hdg*180/Math.PI)%360+360)%360;
+    const bp=u%25;
+    const vg=0.05*Math.sin(u*9.1)+0.03*Math.sin(u*17.3)+
+      (bp<0.12?0.55*Math.sin(bp/0.12*Math.PI):0);
+    return{g:[la,lo,vg],lat,lon,spd:v*3.6,t,yaw,course};
+  }};
+}
+function genDemoJson(sec,ph){
+  const st=demoStepper(ph),rate=25,samples=[],gps=[];
+  for(let i=0;i<sec*rate;i++){
+    const s=st.step(1/rate);
+    samples.push([Math.round(s.t*1000),+s.g[0].toFixed(3),+s.g[1].toFixed(3),
+      +s.yaw.toFixed(1),+s.g[2].toFixed(3)]);
+    if(i%5===0)gps.push([Math.round(s.t*1000),+s.lat.toFixed(6),+s.lon.toFixed(6),
+      +s.spd.toFixed(1),Math.round(s.course)]);
+  }
+  return{app:"friction-circle-recorder",version:1,date:new Date().toISOString(),
+    car:{name:"デモカー",maxG:view.maxG},rate,samples,gps};
+}
+$("btnDemo").addEventListener("click",()=>{
+  SL.forEach(s=>{if(s.data)clearSlot(s);});
+  SL.forEach((s,i)=>loadInto(s,genDemoJson(90+i*6,i*3),"デモ走行_"+(i+1)+"本目"));
+});
+
+/* ================= 仕切り(ドラッグでレイアウト調整) ================= */
+function drag(grip,fn){
+  grip.addEventListener("pointerdown",e=>{
+    e.preventDefault();grip.classList.add("drag");grip.setPointerCapture(e.pointerId);
+    const mv=ev=>fn(ev);
+    const up=()=>{grip.classList.remove("drag");
+      window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);
+      sizeAll();buildCharts();render(P.t);};
+    window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);
+  });
+}
+drag($("gripA"),e=>{
+  const w=Math.max(230,Math.min(560,e.clientX));
+  document.documentElement.style.setProperty("--railw",w+"px");
+  sizeAll();
+});
+drag($("gripB"),e=>{
+  const r=$("main").getBoundingClientRect();
+  const w=Math.max(260,Math.min(r.width-320,r.right-e.clientX));
+  document.documentElement.style.setProperty("--mapw",w+"px");
+  sizeAll();
+});
+
+/* ================= 起動 ================= */
+loadCfg();
+$("hMaxG").value=view.maxG;
+$("hUniMaxG").checked=view.uniMaxG;
+$("hSmooth").value=view.smooth;$("hSmoothV").textContent=view.smooth;
+$("mapType").value=view.mapType;
+$("chkFollow").checked=view.follow;
+$("vOfs").value=view.vofs;$("vOfsV").textContent=view.vofs.toFixed(1);
+buildSlotUI();fillChPicks();syncTrigUI();evalTrig();
+$("hMaxG").addEventListener("change",e=>{
+  view.maxG=Math.min(3,Math.max(0.3,parseFloat(e.target.value)||1.05));
+  $("hMaxG").value=view.maxG;saveCfg();
+  buildHist();
+  buildCharts();updStats();buildMap();render(P.t);
+});
+$("hUniMaxG").addEventListener("change",e=>{
+  view.uniMaxG=e.target.checked;saveCfg();buildCharts();updStats();buildMap();render(P.t);});
+$("hSmooth").addEventListener("input",e=>{
+  view.smooth=+e.target.value;$("hSmoothV").textContent=view.smooth;applySmooth();});
+$("hSmooth").addEventListener("change",()=>{saveCfg();buildMap();});
+sizeAll();buildCharts();initMap();
+/* 表示直後はまだ大きさが確定していないことがあるので、少し後にもう一度調整する */
+setTimeout(()=>{sizeAll();buildCharts();render(P.t);},300);
+window.addEventListener("load",()=>{sizeAll();buildCharts();render(P.t);});
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

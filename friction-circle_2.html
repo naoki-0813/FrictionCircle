@@ -1063,6 +1063,7 @@ function stopRec(){
     rec.jsonObj={app:"friction-circle-recorder",version:1,date:new Date().toISOString(),
       car:{name:set.carName,maxG:set.carMaxG},rate:set.rate,samples:rec.samples,gps:rec.gps};
     rec.jsonObj.name=autoName;
+    rec.jsonObj.dateLocal=isoLocal(rec.jsonObj.date);   // 端末のタイムゾーン(日本時間)での記録日時
     rec.jsonObj.samplesFormat="[t_ms, 横G, 前後G, ヨーレートdps(+右回り), 縦G(+上)]";
     if(lap!=null)rec.jsonObj.lap=Math.round(lap);
     rec.jsonObj.startedAt=rec.startedAt;
@@ -1195,7 +1196,7 @@ async function renderSavedList(){
   for(const it of items){
     const row=document.createElement("div");row.className="savedRow";
     const sl=document.createElement("span");sl.className="sl";
-    sl.textContent=(it.name||"無題")+" ─ "+(it.date||"").slice(5,16).replace("T"," ")
+    sl.textContent=(it.name||"無題")+" ─ "+fmtDT(it.date,false)
       +" / "+Math.round((it.dur||0)/1000)+"秒"+(it.hasVid?" / 動画あり":"");
     row.appendChild(sl);
     const mk=(t,fn)=>{const b=document.createElement("button");b.textContent=t;
@@ -1211,7 +1212,7 @@ async function renderSavedList(){
     mk("Bとして",()=>loadDataB(JSON.parse(JSON.stringify(it.json)),(it.name||"無題")+"(ブラウザ内保存)"));
     mk("Cとして",()=>loadDataC(JSON.parse(JSON.stringify(it.json)),(it.name||"無題")+"(ブラウザ内保存)"));
     mk("書き出し",()=>dl(new Blob([JSON.stringify(it.json)],{type:"application/json"}),
-      "fc_"+(it.name?it.name.replace(/\s+/g,"_")+"_":"")+(it.date||"").slice(0,10)+".json"));
+      "fc_"+stampOf(it.date)+(it.name?"_"+it.name.replace(/\s+/g,"_"):"")+".json"));
     mk("削除",async()=>{
       if(!confirm("この記録を削除しますか?"))return;
       await dbDel("recs",it.id);try{await dbDel("vids",it.id);}catch(_){}
@@ -1226,17 +1227,36 @@ $("btnPasteLoad").addEventListener("click",()=>{
   try{loadData(JSON.parse($("pasteText").value.trim()),"貼り付けデータ");$("pasteText").value="";}
   catch(e){alert("読み込めませんでした。コピーしたデータ全体を貼り付けてください。("+e+")");}
 });
-function stamp(){const d=new Date(),z=n=>String(n).padStart(2,"0");
-  return d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+"_"+z(d.getHours())+z(d.getMinutes());}
+/* ---- 日時の表示(端末のタイムゾーン=日本なら日本時間に直す) ----
+   JSONの date はUTCのISO文字列なので、表示・ファイル名は必ずここを通す */
+const z2=v=>String(v).padStart(2,"0");
+function locDate(iso){if(!iso)return null;const d=new Date(iso);return isNaN(d)?null:d;}
+function fmtDT(iso,withYear){            // 表示用: 2026/09/24 15:30
+  const d=locDate(iso);if(!d)return "";
+  return(withYear===false?"":d.getFullYear()+"/")+
+    z2(d.getMonth()+1)+"/"+z2(d.getDate())+" "+z2(d.getHours())+":"+z2(d.getMinutes());
+}
+function isoLocal(iso){                  // 保存用: 2026-09-24T15:30:12+09:00
+  const d=locDate(iso);if(!d)return "";
+  const o=-d.getTimezoneOffset(),sgn=o>=0?"+":"-",oa=Math.abs(o);
+  return d.getFullYear()+"-"+z2(d.getMonth()+1)+"-"+z2(d.getDate())+"T"+
+    z2(d.getHours())+":"+z2(d.getMinutes())+":"+z2(d.getSeconds())+
+    sgn+z2(Math.floor(oa/60))+":"+z2(oa%60);
+}
+function stampOf(iso){                   // ファイル名用: 20260924_1530
+  const d=locDate(iso)||new Date();
+  return d.getFullYear()+z2(d.getMonth()+1)+z2(d.getDate())+"_"+z2(d.getHours())+z2(d.getMinutes());
+}
+const fnSafe=v=>String(v||"").replace(/[\\\/:*?"<>|\s]+/g,"_").slice(0,40);
 const safeName=()=>{const n=($("recName").value||"").trim()
   .replace(/[\\\/:*?"<>|\s]+/g,"_").slice(0,40);return n?"_"+n:"";};
 $("btnDlJson").addEventListener("click",()=>{if(!rec.jsonObj)return;
   const n=($("recName").value||"").trim();
   if(n)rec.jsonObj.name=n;else delete rec.jsonObj.name;
   dl(new Blob([JSON.stringify(rec.jsonObj)],{type:"application/json"}),
-     "fc_"+stamp()+safeName()+".json");});
+     "fc_"+stampOf(rec.jsonObj.date)+safeName()+".json");});
 $("btnDlVideo").addEventListener("click",()=>rec.videoBlob&&
-  dl(rec.videoBlob,"fc_"+stamp()+safeName()+"."+rec.videoExt));
+  dl(rec.videoBlob,"fc_"+stampOf(rec.jsonObj&&rec.jsonObj.date)+safeName()+"."+rec.videoExt));
 
 /* record-screen render loop */
 function fmtT(ms){const s=Math.floor(ms/1000);return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
@@ -1338,7 +1358,8 @@ $("btnCsv").addEventListener("click",()=>{
       rows.push(c.join(","));
     }
   }
-  dl(new Blob(["﻿"+rows.join("\n")],{type:"text/csv"}),"fc_"+stamp()+".csv");
+  dl(new Blob(["﻿"+rows.join("\n")],{type:"text/csv"}),
+     "fc_"+stampOf(R.data.date)+(R.file?"_"+fnSafe(R.file):"")+".csv");
 });
 $("rpOfsB").addEventListener("input",e=>{
   R.b.off=parseFloat(e.target.value);
@@ -1368,7 +1389,7 @@ function loadDataB(j,fname){
   $("rpInfoB").style.display="block";
   $("rpInfoB").textContent="比較B: "+R.b.file+" ─ "+(j.name?j.name+" / ":"")+
     ((j.car&&j.car.name)?j.car.name+" / ":"")+
-    (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
+    (j.date?fmtDT(j.date)+" ":"")+
     "─ "+(j.samples[j.samples.length-1][0]/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G";
   applySmooth();buildMap();evalTrig();
 }
@@ -1387,7 +1408,7 @@ function loadDataC(j,fname){
   $("rpInfoC").style.display="block";
   $("rpInfoC").textContent="比較C: "+R.c.file+" ─ "+(j.name?j.name+" / ":"")+
     ((j.car&&j.car.name)?j.car.name+" / ":"")+
-    (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
+    (j.date?fmtDT(j.date)+" ":"")+
     "─ "+(j.samples[j.samples.length-1][0]/1000).toFixed(0)+"秒 / 最大"+mx.toFixed(2)+"G";
   applySmooth();buildMap();evalTrig();
 }
@@ -1699,7 +1720,7 @@ function loadData(j,fname){
   buildSlip(j);
   $("rpBody").style.display="block";
   $("rpInfo").textContent="ファイル: "+R.file+" ─ "+(j.name?j.name+" / ":"")+(j.car?j.car.name+" / ":"")+
-    (j.date?j.date.slice(0,16).replace("T"," ")+" ":"")+
+    (j.date?fmtDT(j.date)+" ":"")+
     "─ "+(R.dur/1000).toFixed(0)+"秒 / GPS点 "+(j.gps?j.gps.length:0)+
     (typeof j.lap==="number"?" / 記録時の区間タイム "+lapText(j.lap):"");
   R.offset=(typeof j.videoLag==="number")?Math.max(-3,Math.min(3,j.videoLag)):0;
